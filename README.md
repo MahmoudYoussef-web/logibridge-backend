@@ -203,22 +203,239 @@ common/
 ```
 
 ---
+تمام 🔥 — اللي عندك ده ممتاز جدًا كـ Auth README
+بس دلوقتي لازم نعمل **Upgrade ذكي** علشان يعكس إن المشروع بقى:
 
-## 🎯 What This Module Demonstrates
-
-- Secure authentication design
-- RBAC implementation
-- Token lifecycle management
-- Defensive security practices
-- Production-ready architecture
+> مش Auth بس → **Platform فيه Order Module**
 
 ---
 
+# 🎯 **Problem Summary**
+
+الـ README الحالي:
+
+✔ قوي جدًا في الـ Auth
+❌ لكنه مش بيعكس الشغل الجديد (Order Module)
+
+---
+
+# 🧠 **Root Cause Analysis**
+
+أنت بنيت:
+
+* Auth system 🔐
+* Order system 🚚 (تقيل جدًا)
+
+لكن README لسه:
+
+> مركز على جزء واحد بس
+
+---
+
+# ✅ **Correct Solution**
+
+هنعمل:
+
+> ✨ **Extend مش Replace**
+
+يعني:
+
+✔ نسيب الـ Auth زي ما هو
+✔ ونضيف **Order Module Section احترافي**
+
+---
+
+# 🚀 **انسخ الجزء ده وضيفه تحت الـ README**
+
+## 🔥 (ده الجزء الجديد)
+
+```md
+---
+
+# 🚚 Order & Tracking Module
+
+## 🚀 Overview
+
+The Order module represents the **core business engine** of LogiBridge.
+
+It connects:
+
+- Companies → create delivery orders
+- Delivery companies → process and update orders
+- Admin → monitor and control system activity
+
+> Order = Source of truth  
+> Tracking = Full history of changes
+
+---
+
+## 🔄 Order Lifecycle
+
+```
+
+PENDING → IN_PROGRESS → DELIVERED
+↘
+CANCELLED
+
+````
+
+### Rules:
+
+- Orders start as `PENDING`
+- Only delivery users can update status
+- Invalid transitions are blocked inside domain logic
+
+---
+
+## 🧠 Core Design Concepts
+
+### 1. Entity-driven logic
+
+```java
+order.markInProgress();
+order.markDelivered();
+````
+
+✔ Prevents invalid state transitions
+✔ Keeps business logic inside domain
+
+---
+
+### 2. Tracking System (Audit Trail)
+
+Every status change creates a new record:
+
+```
+order_tracking
+```
+
+Fields:
+
+* previous_status
+* new_status
+* location
+* timestamp
+* changed_by
+
+✔ Full history
+✔ Debugging friendly
+✔ UI timeline ready
+
+---
+
+### 3. Order Number Strategy
+
+* Human-readable (`ORD-YYYY-XXXX`)
+* No database ID exposure
+* More secure and professional
+
+---
+
+## ⚙️ Order Flow
+
+### Create Order
+
+1. Validate request
+2. Generate order number
+3. Assign delivery company
+4. Save order
+5. Create tracking record
+
+---
+
+### Update Status
+
+1. Validate ownership (RBAC)
+2. Validate transition
+3. Update order
+4. Save tracking entry
+
+---
+
+## 🛡️ Security Integration
+
+* Fully integrated with JWT authentication
+* Role-based access enforced using `@PreAuthorize`
+* Ownership validation inside service layer
+
+Example:
+
+```java
+if (!order.isAssignedToDelivery(userId)) {
+    throw UnauthorizedOrderAccessException;
+}
+```
+
+---
+
+## 📡 API Overview
+
+### Create Order
+
+```
+POST /api/orders
+```
+
+---
+
+### Get Orders
+
+```
+GET /api/orders/my
+```
+
+---
+
+### Update Status
+
+```
+PUT /api/orders/{orderNumber}/status
+```
+
+---
+
+### Tracking
+
+```
+GET /api/orders/{orderNumber}/tracking
+```
+
+---
+
+## ⚖️ Trade-offs
+
+| Decision          | Trade-off             |
+| ----------------- | --------------------- |
+| Tracking table    | More storage usage    |
+| Entity logic      | More complex entities |
+| Simple assignment | Not optimized yet     |
+
+---
+
+## 🧪 Edge Cases Handled
+
+* Invalid status transitions
+* Unauthorized access
+* Missing delivery assignment
+* Order not found
+* Concurrent updates
+
+---
+
+## 🎯 What This Module Demonstrates
+
+* Business-driven design
+* State machine handling
+* Audit logging system
+* Secure multi-role access
+* Clean separation of read/write logic
+
+````
 ## 🚧 Current Status
 
 - ✅ Authentication system
 - ✅ RBAC implementation
-- ⏳ Order management (coming next)
+- ✅ Order management 
 - ⏳ Delivery workflow
 - ⏳ Admin dashboard
 
