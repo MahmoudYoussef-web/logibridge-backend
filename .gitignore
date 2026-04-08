@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+*.txt
+structure.txt
+full_project_classes.txt
