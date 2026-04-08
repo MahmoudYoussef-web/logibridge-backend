@@ -10,6 +10,7 @@ import com.logibridge.backend.security.jwt.JwtService;
 import com.logibridge.backend.security.service.CustomUserDetails;
 import com.logibridge.backend.security.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -36,6 +38,7 @@ public class AuthService {
         String email = request.getEmail().toLowerCase().trim();
 
         if (userRepository.existsByEmail(email)) {
+            log.warn("Registration failed — email already in use: {}", email);
             throw new ConflictException("Email already in use");
         }
 
@@ -43,12 +46,17 @@ public class AuthService {
 
         User user = AuthMapper.toUser(request, encodedPassword);
 
-        Role role = roleRepository.findByName(RoleName.ROLE_COMPANY)
-                .orElseThrow(() -> new ResourceNotFoundException("Role not found"));
+        // Use role from request; fall back to ROLE_COMPANY for backward compatibility
+        RoleName roleName = (request.getRole() != null) ? request.getRole() : RoleName.ROLE_COMPANY;
+
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
 
         user.addRole(role);
 
         userRepository.save(user);
+
+        log.info("User registered successfully: email={}, role={}", email, roleName);
 
         return generateAuthResponse(user);
     }
@@ -63,13 +71,14 @@ public class AuthService {
             );
 
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-
-
             User user = userDetails.getUser();
+
+            log.info("User logged in successfully: email={}", email);
 
             return generateAuthResponse(user);
 
         } catch (AuthenticationException ex) {
+            log.warn("Login failed for email={}: {}", email, ex.getMessage());
             throw new UnauthorizedException("Invalid email or password");
         }
     }
