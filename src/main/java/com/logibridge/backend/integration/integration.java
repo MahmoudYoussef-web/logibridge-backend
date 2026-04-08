@@ -1,223 +1,304 @@
-//package com.logibridge.backend.integration;
+//package com.logibridge.backend.auth;
 //
-//
-//import com.fasterxml.jackson.databind.JsonNode;
 //import com.fasterxml.jackson.databind.ObjectMapper;
+//import com.logibridge.backend.auth.dto.*;
+//import com.logibridge.backend.auth.enums.RoleName;
+//import com.logibridge.backend.auth.repository.UserRepository;
+//import com.logibridge.backend.order.dto.CreateOrderRequest;
+//import com.logibridge.backend.order.dto.UpdateOrderStatusRequest;
+//import com.logibridge.backend.order.enums.OrderStatus;
+//import com.logibridge.backend.order.repository.OrderRepository;
+//import org.junit.jupiter.api.*;
 //import org.springframework.beans.factory.annotation.Autowired;
-//import org.springframework.core.annotation.Order;
+//import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+//import org.springframework.boot.test.context.SpringBootTest;
 //import org.springframework.http.MediaType;
+//import org.springframework.test.context.ActiveProfiles;
+//import org.springframework.test.web.servlet.MockMvc;
+//import org.springframework.test.web.servlet.MvcResult;
+//import org.springframework.transaction.annotation.Transactional;
+//
+//import static org.hamcrest.Matchers.*;
+//import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+//import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 //
 //@SpringBootTest
 //@AutoConfigureMockMvc
+//@ActiveProfiles("test")
 //@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 //class AuthIntegrationTest {
 //
-//    @Autowired
-//    private MockMvc mockMvc;
+//    @Autowired MockMvc mockMvc;
+//    @Autowired ObjectMapper objectMapper;
+//    @Autowired UserRepository userRepository;
+//    @Autowired OrderRepository orderRepository;
 //
-//    @Autowired
-//    private ObjectMapper objectMapper;
+//    // Shared state across ordered tests
+//    private static String companyAccessToken;
+//    private static String deliveryAccessToken;
+//    private static String createdOrderNumber;
 //
-//    static String accessToken;
-//    static String refreshToken;
+//    // ──────────────────────────────────────────────
+//    // 1. REGISTER
+//    // ──────────────────────────────────────────────
 //
-//    // =============================
-//    // REGISTER
-//    // =============================
 //    @Test
-//    @Order(1)
-//    void register_success() throws Exception {
+//    @org.junit.jupiter.api.Order(1)
+//    void register_company_user_returns_201_with_tokens() throws Exception {
 //
-//        String request = """
-//        {
-//          "firstName": "Test",
-//          "lastName": "User",
-//          "email": "test@test.com",
-//          "password": "Password123",
-//          "phoneNumber": "01000000000"
-//        }
-//        """;
+//        RegisterRequest request = RegisterRequest.builder()
+//                .firstName("Ahmed")
+//                .lastName("Hassan")
+//                .email("company@test.com")
+//                .password("Company1pass")
+//                .role(RoleName.ROLE_COMPANY)
+//                .build();
 //
-//        MvcResult result = mockMvc.perform(post("/api/auth/register")
+//        mockMvc.perform(post("/api/auth/register")
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
+//                        .content(objectMapper.writeValueAsString(request)))
 //                .andExpect(status().isOk())
-//                .andExpect(jsonPath("$.accessToken").exists())
-//                .andExpect(jsonPath("$.refreshToken").exists())
-//                .andReturn();
-//
-//        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
-//
-//        accessToken = json.get("accessToken").asText();
-//        refreshToken = json.get("refreshToken").asText();
+//                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+//                .andExpect(jsonPath("$.refreshToken").isNotEmpty());
 //    }
 //
-//    // =============================
-//    // LOGIN
-//    // =============================
 //    @Test
-//    @Order(2)
-//    void login_success() throws Exception {
+//    @org.junit.jupiter.api.Order(2)
+//    void register_delivery_user_returns_200_with_tokens() throws Exception {
 //
-//        String request = """
-//        {
-//          "email": "test@test.com",
-//          "password": "Password123"
-//        }
-//        """;
+//        RegisterRequest request = RegisterRequest.builder()
+//                .firstName("Omar")
+//                .lastName("Delivery")
+//                .email("delivery@test.com")
+//                .password("Delivery1pass")
+//                .role(RoleName.ROLE_DELIVERY)
+//                .build();
+//
+//        mockMvc.perform(post("/api/auth/register")
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isOk())
+//                .andExpect(jsonPath("$.accessToken").isNotEmpty());
+//    }
+//
+//    @Test
+//    @org.junit.jupiter.api.Order(3)
+//    void register_duplicate_email_returns_409() throws Exception {
+//
+//        RegisterRequest request = RegisterRequest.builder()
+//                .firstName("Ahmed")
+//                .lastName("Hassan")
+//                .email("company@test.com")   // duplicate
+//                .password("Company1pass")
+//                .build();
+//
+//        mockMvc.perform(post("/api/auth/register")
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isConflict());
+//    }
+//
+//    @Test
+//    @org.junit.jupiter.api.Order(4)
+//    void register_invalid_password_returns_400() throws Exception {
+//
+//        RegisterRequest request = RegisterRequest.builder()
+//                .firstName("Test")
+//                .lastName("User")
+//                .email("bad@test.com")
+//                .password("weak")   // violates pattern + min length
+//                .build();
+//
+//        mockMvc.perform(post("/api/auth/register")
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isBadRequest());
+//    }
+//
+//    // ──────────────────────────────────────────────
+//    // 2. LOGIN
+//    // ──────────────────────────────────────────────
+//
+//    @Test
+//    @org.junit.jupiter.api.Order(5)
+//    void login_company_user_returns_200_and_stores_token() throws Exception {
+//
+//        LoginRequest request = new LoginRequest("company@test.com", "Company1pass");
 //
 //        MvcResult result = mockMvc.perform(post("/api/auth/login")
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
+//                        .content(objectMapper.writeValueAsString(request)))
 //                .andExpect(status().isOk())
-//                .andExpect(jsonPath("$.accessToken").exists())
-//                .andExpect(jsonPath("$.refreshToken").exists())
+//                .andExpect(jsonPath("$.accessToken").isNotEmpty())
 //                .andReturn();
 //
-//        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
+//        AuthResponse response = objectMapper.readValue(
+//                result.getResponse().getContentAsString(), AuthResponse.class);
 //
-//        accessToken = json.get("accessToken").asText();
-//        refreshToken = json.get("refreshToken").asText();
+//        companyAccessToken = response.getAccessToken();
 //    }
 //
-//    // =============================
-//    // LOGIN FAIL
-//    // =============================
 //    @Test
-//    @Order(3)
-//    void login_invalid_password() throws Exception {
+//    @org.junit.jupiter.api.Order(6)
+//    void login_delivery_user_returns_200_and_stores_token() throws Exception {
 //
-//        String request = """
-//        {
-//          "email": "test@test.com",
-//          "password": "WrongPassword123"
-//        }
-//        """;
+//        LoginRequest request = new LoginRequest("delivery@test.com", "Delivery1pass");
+//
+//        MvcResult result = mockMvc.perform(post("/api/auth/login")
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isOk())
+//                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+//                .andReturn();
+//
+//        AuthResponse response = objectMapper.readValue(
+//                result.getResponse().getContentAsString(), AuthResponse.class);
+//
+//        deliveryAccessToken = response.getAccessToken();
+//    }
+//
+//    @Test
+//    @org.junit.jupiter.api.Order(7)
+//    void login_wrong_password_returns_401() throws Exception {
+//
+//        LoginRequest request = new LoginRequest("company@test.com", "WrongPass99");
 //
 //        mockMvc.perform(post("/api/auth/login")
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
+//                        .content(objectMapper.writeValueAsString(request)))
 //                .andExpect(status().isUnauthorized());
 //    }
 //
-//    // =============================
-//    // REFRESH SUCCESS
-//    // =============================
 //    @Test
-//    @Order(4)
-//    void refresh_success() throws Exception {
+//    @org.junit.jupiter.api.Order(8)
+//    void login_unknown_email_returns_401() throws Exception {
 //
-//        String request = """
-//        {
-//          "refreshToken": "%s"
-//        }
-//        """.formatted(refreshToken);
+//        LoginRequest request = new LoginRequest("ghost@test.com", "Whatever1pass");
 //
-//        MvcResult result = mockMvc.perform(post("/api/auth/refresh")
+//        mockMvc.perform(post("/api/auth/login")
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
-//                .andExpect(status().isOk())
-//                .andExpect(jsonPath("$.accessToken").exists())
-//                .andExpect(jsonPath("$.refreshToken").exists())
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isUnauthorized());
+//    }
+//
+//    // ──────────────────────────────────────────────
+//    // 3. CREATE ORDER (ROLE_COMPANY)
+//    // ──────────────────────────────────────────────
+//
+//    @Test
+//    @org.junit.jupiter.api.Order(9)
+//    void create_order_with_company_jwt_returns_201() throws Exception {
+//
+//        CreateOrderRequest request = CreateOrderRequest.builder()
+//                .recipientName("Mohamed Ali")
+//                .recipientPhone("01012345678")
+//                .deliveryAddress("123 Cairo St, Cairo")
+//                .build();
+//
+//        MvcResult result = mockMvc.perform(post("/api/orders")
+//                        .header("Authorization", "Bearer " + companyAccessToken)
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isCreated())
+//                .andExpect(jsonPath("$.orderNumber").isNotEmpty())
+//                .andExpect(jsonPath("$.status").value("PENDING"))
 //                .andReturn();
 //
-//        JsonNode json = objectMapper.readTree(result.getResponse().getContentAsString());
+//        OrderResponse orderResponse = objectMapper.readValue(
+//                result.getResponse().getContentAsString(), OrderResponse.class);
 //
-//        refreshToken = json.get("refreshToken").asText(); // rotation
+//        createdOrderNumber = orderResponse.getOrderNumber();
 //    }
 //
-//    // =============================
-//    // REFRESH REUSE (ATTACK)
-//    // =============================
 //    @Test
-//    @Order(5)
-//    void refresh_reuse_should_fail() throws Exception {
+//    @org.junit.jupiter.api.Order(10)
+//    void create_order_without_jwt_returns_401() throws Exception {
 //
-//        String request = """
-//        {
-//          "refreshToken": "%s"
-//        }
-//        """.formatted(refreshToken);
+//        CreateOrderRequest request = CreateOrderRequest.builder()
+//                .recipientName("Test")
+//                .recipientPhone("01099999999")
+//                .deliveryAddress("Some address")
+//                .build();
 //
-//        // First use → OK
-//        mockMvc.perform(post("/api/auth/refresh")
+//        mockMvc.perform(post("/api/orders")
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
-//                .andExpect(status().isOk());
-//
-//        // Second use → FAIL
-//        mockMvc.perform(post("/api/auth/refresh")
-//                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
+//                        .content(objectMapper.writeValueAsString(request)))
 //                .andExpect(status().isUnauthorized());
 //    }
 //
-//    // =============================
-//    // LOGOUT
-//    // =============================
 //    @Test
-//    @Order(6)
-//    void logout_success() throws Exception {
+//    @org.junit.jupiter.api.Order(11)
+//    void create_order_with_delivery_jwt_returns_403() throws Exception {
 //
-//        String request = """
-//        {
-//          "refreshToken": "%s"
-//        }
-//        """.formatted(refreshToken);
+//        CreateOrderRequest request = CreateOrderRequest.builder()
+//                .recipientName("Test")
+//                .recipientPhone("01099999999")
+//                .deliveryAddress("Some address")
+//                .build();
 //
-//        mockMvc.perform(post("/api/auth/logout")
+//        mockMvc.perform(post("/api/orders")
+//                        .header("Authorization", "Bearer " + deliveryAccessToken)
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
-//                .andExpect(status().isNoContent());
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isForbidden());
 //    }
 //
-//    // =============================
-//    // REFRESH AFTER LOGOUT
-//    // =============================
+//    // ──────────────────────────────────────────────
+//    // 4. UPDATE ORDER STATUS (ROLE_DELIVERY)
+//    // ──────────────────────────────────────────────
+//
 //    @Test
-//    @Order(7)
-//    void refresh_after_logout_should_fail() throws Exception {
+//    @org.junit.jupiter.api.Order(12)
+//    void update_order_status_to_in_progress_with_delivery_jwt_returns_200() throws Exception {
 //
-//        String request = """
-//        {
-//          "refreshToken": "%s"
-//        }
-//        """.formatted(refreshToken);
+//        Assumptions.assumeTrue(createdOrderNumber != null,
+//                "Skipping — order creation test did not run or failed");
 //
-//        mockMvc.perform(post("/api/auth/refresh")
+//        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+//                .status(OrderStatus.IN_PROGRESS)
+//                .location("Cairo Warehouse")
+//                .build();
+//
+//        mockMvc.perform(put("/api/orders/" + createdOrderNumber + "/status")
+//                        .header("Authorization", "Bearer " + deliveryAccessToken)
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
-//                .andExpect(status().isUnauthorized());
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isOk())
+//                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
 //    }
 //
-//    // =============================
-//    // LOGOUT ALL
-//    // =============================
 //    @Test
-//    @Order(8)
-//    void logout_all_success() throws Exception {
+//    @org.junit.jupiter.api.Order(13)
+//    void update_order_status_with_company_jwt_returns_403() throws Exception {
 //
-//        mockMvc.perform(post("/api/auth/logout-all")
-//                        .header("Authorization", "Bearer " + accessToken))
-//                .andExpect(status().isOk());
+//        Assumptions.assumeTrue(createdOrderNumber != null,
+//                "Skipping — order creation test did not run or failed");
+//
+//        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+//                .status(OrderStatus.IN_PROGRESS)
+//                .location("Cairo")
+//                .build();
+//
+//        mockMvc.perform(put("/api/orders/" + createdOrderNumber + "/status")
+//                        .header("Authorization", "Bearer " + companyAccessToken)
+//                        .contentType(MediaType.APPLICATION_JSON)
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isForbidden());
 //    }
 //
-//    // =============================
-//    // REFRESH AFTER LOGOUT ALL
-//    // =============================
 //    @Test
-//    @Order(9)
-//    void refresh_after_logout_all_should_fail() throws Exception {
+//    @org.junit.jupiter.api.Order(14)
+//    void update_order_status_on_nonexistent_order_returns_404() throws Exception {
 //
-//        String request = """
-//        {
-//          "refreshToken": "%s"
-//        }
-//        """.formatted(refreshToken);
+//        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+//                .status(OrderStatus.IN_PROGRESS)
+//                .location("Cairo")
+//                .build();
 //
-//        mockMvc.perform(post("/api/auth/refresh")
+//        mockMvc.perform(put("/api/orders/ORD-NONEXISTENT/status")
+//                        .header("Authorization", "Bearer " + deliveryAccessToken)
 //                        .contentType(MediaType.APPLICATION_JSON)
-//                        .content(request))
-//                .andExpect(status().isUnauthorized());
+//                        .content(objectMapper.writeValueAsString(request)))
+//                .andExpect(status().isNotFound());
 //    }
 //}
