@@ -1,3 +1,4 @@
+`````markdown
 # 🚚 LogiBridge - Delivery Integration Platform
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
@@ -125,7 +126,7 @@ order.reject();
 order.markDelivered();
 ```
 
-✔ Prevents invalid transitions
+✔ Prevents invalid transitions  
 ✔ Keeps logic centralized
 
 ---
@@ -207,9 +208,10 @@ OrderValidator:
 * Uses Optimistic Locking (@Version)
 * Prevents race conditions
 
-
 ---
+
 # 🚀 How to Run
+
 ````markdown
 # 🐳 Docker Setup
 
@@ -227,17 +229,17 @@ Run the entire system (Backend + Database) using Docker.
 
 ```bash
 docker-compose up --build
-````
+```
 
 ---
 
 ## 🌐 Access the application
 
 * API:
-  [http://localhost:8080](http://localhost:8080)
+  http://localhost:8080
 
 * Swagger UI:
-  [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+  http://localhost:8080/swagger-ui/index.html
 
 ---
 
@@ -268,9 +270,11 @@ Configured inside `docker-compose.yml`:
 * Uses PostgreSQL inside container
 
 ---
+`````
 
 ```
 ```
+
 ---
 
 # 🌐 API Endpoints
