@@ -5,6 +5,7 @@ import com.logibridge.backend.order.enums.OrderStatus;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public final class OrderSpecification {
 
@@ -29,6 +30,14 @@ public final class OrderSpecification {
                 status == null
                         ? cb.conjunction()
                         : cb.equal(root.get("status"), status);
+    }
+
+
+    public static Specification<Order> hasStatusIn(List<OrderStatus> statuses) {
+        return (root, query, cb) ->
+                (statuses == null || statuses.isEmpty())
+                        ? cb.conjunction()
+                        : root.get("status").in(statuses);
     }
 
     public static Specification<Order> createdAfter(LocalDateTime date) {

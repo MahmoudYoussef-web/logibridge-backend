@@ -5,6 +5,7 @@ import com.logibridge.backend.auth.enums.RoleName;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -22,15 +23,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
 
+
     @Query("""
-        SELECT u FROM User u
-        JOIN u.userRoles ur
-        JOIN ur.role r
-        WHERE r.name = :roleName
-          AND u.enabled = true
-          AND u.accountNonLocked = true
-        ORDER BY u.id ASC
-        LIMIT 1
-    """)
-    Optional<User> findFirstActiveUserByRole(@Param("roleName") RoleName roleName);
+    SELECT DISTINCT u FROM User u
+    JOIN u.userRoles ur
+    JOIN ur.role r
+    WHERE r.name = :roleName
+      AND u.enabled = true
+      AND u.accountNonLocked = true
+""")
+    List<User> findAllActiveUsersByRole(@Param("roleName") RoleName roleName);
 }

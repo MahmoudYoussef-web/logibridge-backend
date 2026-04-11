@@ -1,6 +1,5 @@
 package com.logibridge.backend.order.entity;
 
-
 import com.logibridge.backend.order.dto.CreateOrderRequest;
 import com.logibridge.backend.order.enums.OrderStatus;
 import jakarta.persistence.*;
@@ -74,8 +73,6 @@ public class Order {
     @Builder.Default
     private List<OrderTracking> trackingHistory = new ArrayList<>();
 
-
-
     @PrePersist
     void onCreate() {
         if (this.createdAt == null) {
@@ -87,42 +84,41 @@ public class Order {
     }
 
 
-
-    public void initialize() {
-        if (this.status != null) {
-            throw new IllegalStateException("Order has already been initialized.");
-        }
-        this.status    = OrderStatus.PENDING;
-        this.createdAt = LocalDateTime.now();
-    }
-
-    public void markInProgress(Long changedBy, String location) {
-        changeStatus(OrderStatus.IN_PROGRESS, changedBy, location);
-    }
-
-    public void markDelivered(Long changedBy, String location) {
-        changeStatus(OrderStatus.DELIVERED, changedBy, location);
-    }
-
-    public void cancel(Long changedBy, String location) {
-        changeStatus(OrderStatus.CANCELLED, changedBy, location);
-    }
-
-    public void assignDeliveryCompany(Long deliveryCompanyId) {
-        if (this.status != OrderStatus.PENDING) {
-            throw new IllegalStateException(
-                    "Delivery company can only be assigned when order is PENDING.");
-        }
+    public void assign(Long deliveryCompanyId, Long actorId, String location) {
         if (this.deliveryCompanyId != null) {
             throw new IllegalStateException(
-                    "Order is already assigned to a delivery company (id=" + this.deliveryCompanyId + ").");
+                    "Order is already assigned to delivery company id=" + this.deliveryCompanyId);
         }
         this.deliveryCompanyId = deliveryCompanyId;
+        changeStatus(OrderStatus.ASSIGNED, actorId, location);
     }
 
-    public void changeStatus(OrderStatus newStatus, Long changedBy, String location) {
+
+    public void accept(Long actorId, String location) {
+        changeStatus(OrderStatus.ACCEPTED, actorId, location);
+    }
+
+
+    public void reject(Long actorId, String location) {
+        changeStatus(OrderStatus.REJECTED, actorId, location);
+    }
+
+
+    public void markInProgress(Long actorId, String location) {
+        changeStatus(OrderStatus.IN_PROGRESS, actorId, location);
+    }
+
+    public void markDelivered(Long actorId, String location) {
+        changeStatus(OrderStatus.DELIVERED, actorId, location);
+    }
+
+    public void cancel(Long actorId, String location) {
+        changeStatus(OrderStatus.CANCELLED, actorId, location);
+    }
+
+    private void changeStatus(OrderStatus newStatus, Long changedBy, String location) {
         if (this.status == null) {
-            throw new IllegalStateException("Order must be initialized before changing status.");
+            throw new IllegalStateException("Order status is not initialized.");
         }
         if (!this.status.canTransitionTo(newStatus)) {
             throw new IllegalStateException(
@@ -143,7 +139,6 @@ public class Order {
     }
 
 
-
     public boolean isOwnedByCompany(Long companyId) {
         return this.companyId != null && this.companyId.equals(companyId);
     }
@@ -162,7 +157,6 @@ public class Order {
     }
 
     private static class ValidatingOrderBuilder extends OrderBuilder {
-
         @Override
         public Order build() {
             if (super.weight != null && super.weight <= 0) {
@@ -173,8 +167,9 @@ public class Order {
         }
     }
 
+
     public static Order create(CreateOrderRequest request, Long companyId, String orderNumber) {
-        Order order = Order.builder()
+        return Order.builder()
                 .companyId(companyId)
                 .orderNumber(orderNumber)
                 .productName(request.getProductName())
@@ -183,7 +178,6 @@ public class Order {
                 .pickupAddress(request.getPickupAddress())
                 .deliveryAddress(request.getDeliveryAddress())
                 .build();
-        order.initialize();
-        return order;
+
     }
 }

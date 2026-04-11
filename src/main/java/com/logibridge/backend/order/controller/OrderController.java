@@ -18,7 +18,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,42 +25,36 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
 
     private final OrderService orderService;
     private final OrderQueryService orderQueryService;
 
-    @PostMapping
+
+
+    @PostMapping("/api/orders")
     @PreAuthorize("hasRole('COMPANY')")
     public ResponseEntity<OrderResponse> createOrder(
             @Valid @RequestBody CreateOrderRequest request
     ) {
-        Long companyId = resolveUserId();
-        OrderResponse response = orderService.createOrder(request, companyId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        Long companyId = getCurrentUser().getId();
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(orderService.createOrder(request, companyId));
     }
 
-    @GetMapping("/my")
+    @GetMapping("/api/orders/my")
     @PreAuthorize("hasRole('COMPANY')")
     public ResponseEntity<Page<OrderResponse>> getMyOrders(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
     ) {
-        Long companyId = resolveUserId();
+        Long companyId = getCurrentUser().getId();
         return ResponseEntity.ok(orderQueryService.getCompanyOrders(companyId, pageable));
     }
 
-    @GetMapping("/delivery")
-    @PreAuthorize("hasRole('DELIVERY')")
-    public ResponseEntity<Page<OrderResponse>> getAssignedOrders(
-            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
-    ) {
-        Long deliveryCompanyId = resolveUserId();
-        return ResponseEntity.ok(orderQueryService.getDeliveryOrders(deliveryCompanyId, pageable));
-    }
 
-    @GetMapping("/admin")
+
+    @GetMapping("/api/orders/admin")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Page<OrderResponse>> filterOrders(
             @RequestParam(required = false) Long companyId,
@@ -78,49 +71,89 @@ public class OrderController {
                         companyId, deliveryCompanyId, status, fromDate, toDate, pageable));
     }
 
-    @GetMapping("/{orderNumber}")
-    @PreAuthorize("hasAnyRole('COMPANY', 'DELIVERY', 'ADMIN')")
-    public ResponseEntity<OrderResponse> getOrderByOrderNumber(
-            @PathVariable String orderNumber
-    ) {
-        Long userId = resolveUserId();
-        String role = resolveRole();
-        return ResponseEntity.ok(orderQueryService.getOrderByOrderNumber(orderNumber, userId, role));
+
+
+    @GetMapping("/api/orders/{orderNumber}")
+    @PreAuthorize("hasAnyRole('COMPANY','DELIVERY','ADMIN')")
+    public ResponseEntity<OrderResponse> getOrder(@PathVariable String orderNumber) {
+
+        CustomUserDetails user = getCurrentUser();
+
+        return ResponseEntity.ok(
+                orderQueryService.getOrderByOrderNumber(
+                        orderNumber,
+                        user.getId(),
+                        user.getAuthorities()
+                )
+        );
     }
 
-    @PutMapping("/{orderNumber}/status")
+    @PutMapping("/api/orders/{orderNumber}/status")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<OrderResponse> updateOrderStatus(
             @PathVariable String orderNumber,
             @Valid @RequestBody UpdateOrderStatusRequest request
     ) {
-        Long deliveryCompanyId = resolveUserId();
-        return ResponseEntity.ok(orderService.updateOrderStatus(orderNumber, request, deliveryCompanyId));
+        Long deliveryId = getCurrentUser().getId();
+        return ResponseEntity.ok(
+                orderService.updateOrderStatus(orderNumber, request, deliveryId)
+        );
     }
 
-    @GetMapping("/{orderNumber}/tracking")
-    @PreAuthorize("hasAnyRole('COMPANY', 'DELIVERY', 'ADMIN')")
-    public ResponseEntity<List<OrderTrackingResponse>> getOrderTracking(
+    @GetMapping("/api/orders/{orderNumber}/tracking")
+    @PreAuthorize("hasAnyRole('COMPANY','DELIVERY','ADMIN')")
+    public ResponseEntity<List<OrderTrackingResponse>> getTracking(
             @PathVariable String orderNumber
     ) {
-        Long userId = resolveUserId();
-        String role = resolveRole();
-        return ResponseEntity.ok(orderQueryService.getOrderTracking(orderNumber, userId, role));
+        CustomUserDetails user = getCurrentUser();
+
+        return ResponseEntity.ok(
+                orderQueryService.getOrderTracking(
+                        orderNumber,
+                        user.getId(),
+                        user.getAuthorities() // 🔥 FIX
+                )
+        );
     }
 
-    private Long resolveUserId() {
-        return resolvePrincipal().getId();
+
+
+    @GetMapping("/api/delivery/orders/assigned")
+    @PreAuthorize("hasRole('DELIVERY')")
+    public ResponseEntity<Page<OrderResponse>> getAssignedOrders(
+            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
+    ) {
+        Long deliveryId = getCurrentUser().getId();
+        return ResponseEntity.ok(
+                orderQueryService.getDeliveryOrders(deliveryId, pageable)
+        );
     }
 
-    private String resolveRole() {
-        return resolvePrincipal().getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .filter(a -> a.startsWith("ROLE_"))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No role found"));
+    @PostMapping("/api/delivery/orders/{orderNumber}/accept")
+    @PreAuthorize("hasRole('DELIVERY')")
+    public ResponseEntity<OrderResponse> acceptOrder(
+            @PathVariable String orderNumber
+    ) {
+        Long deliveryId = getCurrentUser().getId();
+        return ResponseEntity.ok(
+                orderService.acceptOrder(orderNumber, deliveryId)
+        );
     }
 
-    private CustomUserDetails resolvePrincipal() {
+    @PostMapping("/api/delivery/orders/{orderNumber}/reject")
+    @PreAuthorize("hasRole('DELIVERY')")
+    public ResponseEntity<OrderResponse> rejectOrder(
+            @PathVariable String orderNumber
+    ) {
+        Long deliveryId = getCurrentUser().getId();
+        return ResponseEntity.ok(
+                orderService.rejectOrder(orderNumber, deliveryId)
+        );
+    }
+
+
+
+    private CustomUserDetails getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (CustomUserDetails) auth.getPrincipal();
     }

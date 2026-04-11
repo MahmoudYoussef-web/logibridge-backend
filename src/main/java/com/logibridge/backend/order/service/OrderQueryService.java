@@ -3,6 +3,7 @@ package com.logibridge.backend.order.service;
 import com.logibridge.backend.order.dto.OrderResponse;
 import com.logibridge.backend.order.dto.OrderTrackingResponse;
 import com.logibridge.backend.order.entity.Order;
+import com.logibridge.backend.order.enums.OrderStatus;
 import com.logibridge.backend.order.exception.OrderNotFoundException;
 import com.logibridge.backend.order.exception.UnauthorizedOrderAccessException;
 import com.logibridge.backend.order.mapper.OrderMapper;
@@ -10,36 +11,37 @@ import com.logibridge.backend.order.mapper.OrderTrackingMapper;
 import com.logibridge.backend.order.repository.OrderRepository;
 import com.logibridge.backend.order.repository.OrderTrackingRepository;
 import com.logibridge.backend.order.specification.OrderSpecification;
-import com.logibridge.backend.order.enums.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class OrderQueryService {
 
-    private static final String ROLE_ADMIN    = "ROLE_ADMIN";
-    private static final String ROLE_COMPANY  = "ROLE_COMPANY";
-    private static final String ROLE_DELIVERY = "ROLE_DELIVERY";
-
-    private final OrderRepository         orderRepository;
+    private final OrderRepository orderRepository;
     private final OrderTrackingRepository orderTrackingRepository;
-    private final OrderMapper             orderMapper;
-    private final OrderTrackingMapper     orderTrackingMapper;
+    private final OrderMapper orderMapper;
+    private final OrderTrackingMapper orderTrackingMapper;
 
     @Transactional(readOnly = true)
-    public OrderResponse getOrderByOrderNumber(String orderNumber, Long userId, String role) {
+    public OrderResponse getOrderByOrderNumber(
+            String orderNumber,
+            Long userId,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
 
-        enforceReadAccess(order, userId, role);
+        enforceReadAccess(order, userId, authorities);
 
         return orderMapper.toResponse(order);
     }
@@ -57,15 +59,31 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
+    public Page<OrderResponse> getAssignedOrders(Long deliveryCompanyId, Pageable pageable) {
+        List<OrderStatus> activeStatuses = List.of(
+                OrderStatus.ASSIGNED,
+                OrderStatus.ACCEPTED,
+                OrderStatus.IN_PROGRESS
+        );
+
+        Specification<Order> spec = Specification
+                .where(OrderSpecification.hasDeliveryCompanyId(deliveryCompanyId))
+                .and(OrderSpecification.hasStatusIn(activeStatuses));
+
+        return orderRepository.findAll(spec, pageable)
+                .map(orderMapper::toResponse);
+    }
+
+    @Transactional(readOnly = true)
     public List<OrderTrackingResponse> getOrderTracking(
             String orderNumber,
             Long userId,
-            String role
+            Collection<? extends GrantedAuthority> authorities
     ) {
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
 
-        enforceReadAccess(order, userId, role);
+        enforceReadAccess(order, userId, authorities);
 
         return orderTrackingRepository.findByOrderIdOrderByTimestampAsc(order.getId())
                 .stream()
@@ -89,23 +107,27 @@ public class OrderQueryService {
                 .map(orderMapper::toResponse);
     }
 
-    private void enforceReadAccess(Order order, Long userId, String role) {
-        switch (role) {
-            case ROLE_ADMIN -> { /* unrestricted */ }
-            case ROLE_COMPANY -> {
-                if (!order.isOwnedByCompany(userId)) {
-                    throw new UnauthorizedOrderAccessException(
-                            "Company " + userId + " does not own order " + order.getOrderNumber());
-                }
-            }
-            case ROLE_DELIVERY -> {
-                if (!order.isAssignedToDelivery(userId)) {
-                    throw new UnauthorizedOrderAccessException(
-                            "Delivery company " + userId +
-                                    " is not assigned to order " + order.getOrderNumber());
-                }
-            }
-            default -> throw new UnauthorizedOrderAccessException("Unknown role: " + role);
-        }
+    private void enforceReadAccess(
+            Order order,
+            Long userId,
+            Collection<? extends GrantedAuthority> authorities
+    ) {
+
+        boolean isAdmin = authorities.stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (isAdmin) return;
+
+        boolean isCompany = authorities.stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_COMPANY"));
+
+        if (isCompany && order.isOwnedByCompany(userId)) return;
+
+        boolean isDelivery = authorities.stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_DELIVERY"));
+
+        if (isDelivery && order.isAssignedToDelivery(userId)) return;
+
+        throw new UnauthorizedOrderAccessException("Access denied for this order");
     }
 }

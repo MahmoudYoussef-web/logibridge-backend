@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.Instant;
+
 @Slf4j
 @Validated
 @Service
@@ -28,39 +30,104 @@ public class OrderService {
     private final OrderMapper orderMapper;
     private final OrderNumberGenerator orderNumberGenerator;
     private final OrderAssignmentService orderAssignmentService;
-    private final OrderTrackingService orderTrackingService;
     private final OrderValidator orderValidator;
+
+    // ==================== AUDIT HELPER ====================
+
+    private void logAudit(String action, Long userId, String role, String orderNumber) {
+        log.info("[AUDIT] action={} userId={} role={} order={} timestamp={}",
+                action,
+                userId != null ? userId : "N/A",
+                role != null ? role : "N/A",
+                orderNumber != null ? orderNumber : "-",
+                Instant.now());
+    }
+
+    // ========================= CREATE =========================
 
     @Transactional
     public OrderResponse createOrder(@Valid CreateOrderRequest request, Long companyId) {
-
         log.info("Creating order for companyId={}", companyId);
 
         String orderNumber = orderNumberGenerator.generate();
 
         Order order = Order.create(request, companyId, orderNumber);
+        Order persisted = orderRepository.save(order);
 
         Long deliveryCompanyId = orderAssignmentService.assignDelivery(request);
+        persisted.assign(deliveryCompanyId, companyId, null);
 
-        order.assignDeliveryCompany(deliveryCompanyId);
+        logAudit("ORDER_CREATED", companyId, "ROLE_COMPANY", orderNumber);
+        logAudit("ORDER_ASSIGNED", companyId, "ROLE_COMPANY", orderNumber);
 
-        // Validate ownership consistency before persisting
+        return orderMapper.toResponse(persisted);
+    }
+
+    // ========================= COMPANY =========================
+
+    @Transactional
+    public OrderResponse cancelOrder(String orderNumber, Long companyId) {
+        log.info("Company {} cancelling order={}", companyId, orderNumber);
+
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException(orderNumber));
+
         orderValidator.validateOwnership(order, companyId);
 
-        Order saved = orderRepository.save(order);
+        try {
+            orderValidator.validateTransition(order, OrderStatus.CANCELLED);
+            order.cancel(companyId, null);
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderStateException(ex.getMessage());
+        }
 
-        orderTrackingService.track(
-                saved,
-                null,
-                saved.getStatus(),
-                companyId,
-                null
-        );
+        logAudit("ORDER_CANCELLED", companyId, "ROLE_COMPANY", orderNumber);
 
-        log.info("Order created: orderNumber={}, companyId={}, deliveryCompanyId={}",
-                saved.getOrderNumber(), companyId, deliveryCompanyId);
+        return orderMapper.toResponse(order);
+    }
 
-        return orderMapper.toResponse(saved);
+    // ========================= DELIVERY =========================
+
+    @Transactional
+    public OrderResponse acceptOrder(String orderNumber, Long deliveryCompanyId) {
+        log.info("Delivery {} accepting order={}", deliveryCompanyId, orderNumber);
+
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException(orderNumber));
+
+        orderValidator.validateDeliveryAccess(order, deliveryCompanyId);
+        orderValidator.validateTransition(order, OrderStatus.ACCEPTED);
+
+        try {
+            order.accept(deliveryCompanyId, null);
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderStateException(ex.getMessage());
+        }
+
+        logAudit("ORDER_ACCEPTED", deliveryCompanyId, "ROLE_DELIVERY", orderNumber);
+
+        return orderMapper.toResponse(order);
+    }
+
+    @Transactional
+    public OrderResponse rejectOrder(String orderNumber, Long deliveryCompanyId) {
+        log.info("Delivery {} rejecting order={}", deliveryCompanyId, orderNumber);
+
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException(orderNumber));
+
+        orderValidator.validateDeliveryAccess(order, deliveryCompanyId);
+        orderValidator.validateTransition(order, OrderStatus.REJECTED);
+
+        try {
+            order.reject(deliveryCompanyId, null);
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderStateException(ex.getMessage());
+        }
+
+        logAudit("ORDER_REJECTED", deliveryCompanyId, "ROLE_DELIVERY", orderNumber);
+
+        return orderMapper.toResponse(order);
     }
 
     @Transactional
@@ -69,35 +136,63 @@ public class OrderService {
             @Valid UpdateOrderStatusRequest request,
             Long deliveryCompanyId
     ) {
-
-        log.info("Updating order status: orderNumber={}, requestedStatus={}, deliveryCompanyId={}",
+        log.info("Updating order status: orderNumber={}, status={}, deliveryId={}",
                 orderNumber, request.getStatus(), deliveryCompanyId);
 
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
 
-        // Delegate access check to validator (replaces inline if-block)
         orderValidator.validateDeliveryAccess(order, deliveryCompanyId);
 
-        OrderStatus previousStatus = order.getStatus();
+        try {
+            orderValidator.validateTransition(order, request.getStatus());
 
-        applyStatusTransition(order, request.getStatus(), deliveryCompanyId, request.getLocation());
+            applyStatusTransition(order, request.getStatus(), deliveryCompanyId, request.getLocation());
 
-        Order saved = orderRepository.save(order);
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderStateException(ex.getMessage());
 
-        orderTrackingService.track(
-                saved,
-                previousStatus,
-                saved.getStatus(),
-                deliveryCompanyId,
-                request.getLocation()
-        );
+        } catch (jakarta.persistence.OptimisticLockException ex) {
+            throw new RuntimeException("Order was updated concurrently. Please retry.");
+        }
 
-        log.info("Order status updated: orderNumber={}, previousStatus={}, newStatus={}",
-                orderNumber, previousStatus, saved.getStatus());
+        logAudit("ORDER_STATUS_UPDATED", deliveryCompanyId, "ROLE_DELIVERY", orderNumber);
 
-        return orderMapper.toResponse(saved);
+        return orderMapper.toResponse(order);
     }
+
+    // ========================= ADMIN =========================
+
+    @Transactional
+    public OrderResponse adminForceUpdateStatus(
+            String orderNumber,
+            OrderStatus targetStatus,
+            Long adminId
+    ) {
+        log.warn("ADMIN {} forcing order {} to {}", adminId, orderNumber, targetStatus);
+
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException(orderNumber));
+
+        if (!isAdminForceAllowed(targetStatus)) {
+            throw new InvalidOrderStateException(
+                    "Admin can only force: IN_PROGRESS, DELIVERED, CANCELLED");
+        }
+
+        try {
+            orderValidator.validateTransition(order, targetStatus);
+            applyAdminTransition(order, targetStatus, adminId);
+
+        } catch (IllegalStateException ex) {
+            throw new InvalidOrderStateException(ex.getMessage());
+        }
+
+        logAudit("ADMIN_FORCE_STATUS", adminId, "ROLE_ADMIN", orderNumber);
+
+        return orderMapper.toResponse(order);
+    }
+
+    // ========================= HELPERS =========================
 
     private void applyStatusTransition(
             Order order,
@@ -105,16 +200,27 @@ public class OrderService {
             Long actorId,
             String location
     ) {
-        try {
-            switch (target) {
-                case IN_PROGRESS -> order.markInProgress(actorId, location);
-                case DELIVERED    -> order.markDelivered(actorId, location);
-                case CANCELLED    -> order.cancel(actorId, location);
-                default -> throw new InvalidOrderStateException(
-                        "Transition to status " + target + " is not supported");
-            }
-        } catch (IllegalStateException ex) {
-            throw new InvalidOrderStateException(ex.getMessage());
+        switch (target) {
+            case IN_PROGRESS -> order.markInProgress(actorId, location);
+            case DELIVERED   -> order.markDelivered(actorId, location);
+            case CANCELLED   -> order.cancel(actorId, location);
+            default -> throw new InvalidOrderStateException(
+                    "Direct transition to [" + target + "] not allowed here.");
         }
+    }
+
+    private void applyAdminTransition(Order order, OrderStatus status, Long adminId) {
+        switch (status) {
+            case IN_PROGRESS -> order.markInProgress(adminId, "ADMIN_OVERRIDE");
+            case DELIVERED   -> order.markDelivered(adminId, "ADMIN_OVERRIDE");
+            case CANCELLED   -> order.cancel(adminId, "ADMIN_OVERRIDE");
+            default -> throw new InvalidOrderStateException("Unsupported admin status: " + status);
+        }
+    }
+
+    private boolean isAdminForceAllowed(OrderStatus status) {
+        return status == OrderStatus.IN_PROGRESS
+                || status == OrderStatus.DELIVERED
+                || status == OrderStatus.CANCELLED;
     }
 }
