@@ -1,411 +1,348 @@
-# 🔐 LogiBridge Authentication & RBAC System
+# 🚚 LogiBridge - Delivery Integration Platform
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/SpringBoot-3.x-green)
 ![Security](https://img.shields.io/badge/Security-JWT%20%2B%20RBAC-red)
-![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
 
 ---
 
-## 🚀 Overview
+# 🚀 Overview
 
-This module implements a **production-grade authentication and authorization system** for the LogiBridge platform.
+LogiBridge is a **production-grade delivery integration platform** that connects:
 
-It is designed with a strong focus on:
+* 🏢 Companies → create and track delivery orders
+* 🚚 Delivery companies → accept and process orders
+* 🛡️ Admin → monitor and control system
 
-- Security-first architecture
-- Stateless authentication (JWT)
-- Database-driven authorization (RBAC)
-- Token lifecycle management
-- Protection against replay attacks
-
-> This is not a basic JWT setup — it is designed to handle real-world security scenarios.
+> Designed using real-world backend engineering practices: security, scalability, and clean architecture.
 
 ---
 
-## 🧠 Architecture Principle
+# 🧠 Architecture
 
+```text
+Controller → Service → Repository → Entity
 ```
 
-JWT → Identity (WHO)
-DB  → Authorization (WHAT)
+### Core Principles:
 
+* JWT → Authentication (WHO)
+* DB → Authorization (WHAT)
+* Entity → Business Logic (HOW)
+
+---
+
+# 🏗️ Project Structure
+
+```text
+src/main/java/com/logibridge/backend/
+
+├── auth         → Authentication & user management
+├── security     → JWT + filters + rate limiting
+├── order        → Core business module
+│   ├── controller
+│   ├── service
+│   ├── repository
+│   ├── entity
+│   ├── dto
+│   ├── mapper
+│   ├── validator
+│   ├── specification
+├── common       → Shared utilities & exceptions
 ```
 
-- JWT is used only for authentication
-- Roles and permissions are always resolved from the database
+---
+
+# 🔐 Authentication & Security
+
+### ✔ Features:
+
+* JWT Authentication (stateless)
+* Refresh Token Rotation (stored in DB)
+* RBAC (database-driven roles)
+* BCrypt password hashing
+* Token type validation (ACCESS vs REFRESH)
+* Centralized exception handling
 
 ---
 
-## 🔄 Authentication Flow
+# 🛡️ Advanced Security
 
-### 🔑 Login
+## 🔥 Audit Logging
 
-```
+Tracks all critical actions:
 
-POST /api/auth/login
-
-```
-
-Flow:
-
-1. User submits credentials
-2. AuthenticationManager validates password (BCrypt)
-3. User + roles loaded from DB
-4. JWT access token generated
-5. Refresh token stored in DB
-6. Tokens returned to client
-
----
-
-### 📡 Request Flow
-
-```
-
-Authorization: Bearer <access_token>
-
-```
-
-1. JwtAuthenticationFilter intercepts request
-2. Token is validated (signature + expiration)
-3. Token type enforced (ACCESS only)
-4. User loaded from DB
-5. Roles mapped to authorities
-6. SecurityContext populated
-
----
-
-### 🔁 Refresh Token Flow
-
-```
-
-POST /api/auth/refresh
-
-```
-
-- Refresh token validated from DB
-- Old token revoked
-- New access + refresh tokens generated
-
----
-
-### 🚨 Reuse Detection (Critical Security)
-
-If a revoked refresh token is reused:
-
-→ All user sessions are invalidated  
-→ All refresh tokens are deleted  
-
-This prevents:
-
-- Token theft reuse
-- Replay attacks
-
----
-
-### 🚪 Logout
-
-- Single device logout → revoke token  
-- Logout all devices → delete all refresh tokens  
-
----
-
-## 🛡️ Authorization (RBAC)
-
-### Model
-
-```
-
-User → UserRole → Role
-
-```
-
-### Why DB-driven roles?
-
-- Prevent stale permissions
-- Immediate role updates
-- No trust in client-side tokens
-
----
-
-## 🔐 Security Features
-
-- JWT signature validation
-- Token expiration enforcement
-- Token type validation (ACCESS vs REFRESH)
-- BCrypt password hashing
-- Role-based authorization using `@PreAuthorize`
-- No sensitive data exposure
-- Centralized exception handling
-
----
-
-## 🧠 Key Design Decisions
-
-### 1. JWT بدون Roles
-
-- Prevent privilege escalation
-- Avoid stale authorization
-
----
-
-### 2. Refresh Tokens في DB
-
-- Enables logout
-- Enables rotation
-- Enables revocation
-
----
-
-### 3. Refresh Token Rotation
-
-- One-time use tokens
-- Prevent replay attacks
-
----
-
-### 4. Stateless + Stateful Hybrid
-
-- Stateless access tokens → scalability
-- Stateful refresh tokens → control
-
----
-
-## ⚖️ Trade-offs
-
-| Decision                  | Trade-off                  |
-|--------------------------|----------------------------|
-| DB lookup per request    | Higher latency             |
-| No roles in JWT          | Requires DB access         |
-| Token rotation           | More complexity            |
-
----
-
-## 🧪 Edge Cases Handled
-
-- Expired tokens
-- Invalid tokens
-- Reused refresh tokens
-- Unauthorized access
-- Disabled users
-- Locked accounts
-
----
-
-## 📁 Module Structure
-
-```
-
-auth/
-security/
-common/
-
-```
-
-
-```md
----
-
-# 🚚 Order & Tracking Module
-
-## 🚀 Overview
-
-The Order module represents the **core business engine** of LogiBridge.
-
-It connects:
-
-- Companies → create delivery orders
-- Delivery companies → process and update orders
-- Admin → monitor and control system activity
-
-> Order = Source of truth  
-> Tracking = Full history of changes
-
----
-
-## 🔄 Order Lifecycle
-
-```
-
-PENDING → IN_PROGRESS → DELIVERED
-↘
-CANCELLED
-
-````
-
-### Rules:
-
-- Orders start as `PENDING`
-- Only delivery users can update status
-- Invalid transitions are blocked inside domain logic
-
----
-
-## 🧠 Core Design Concepts
-
-### 1. Entity-driven logic
-
-```java
-order.markInProgress();
-order.markDelivered();
-````
-
-✔ Prevents invalid state transitions
-✔ Keeps business logic inside domain
-
----
-
-### 2. Tracking System (Audit Trail)
-
-Every status change creates a new record:
-
-```
-order_tracking
-```
-
-Fields:
-
-* previous_status
-* new_status
-* location
-* timestamp
-* changed_by
-
-✔ Full history
-✔ Debugging friendly
-✔ UI timeline ready
-
----
-
-### 3. Order Number Strategy
-
-* Human-readable (`ORD-YYYY-XXXX`)
-* No database ID exposure
-* More secure and professional
-
----
-
-## ⚙️ Order Flow
-
-### Create Order
-
-1. Validate request
-2. Generate order number
-3. Assign delivery company
-4. Save order
-5. Create tracking record
-
----
-
-### Update Status
-
-1. Validate ownership (RBAC)
-2. Validate transition
-3. Update order
-4. Save tracking entry
-
----
-
-## 🛡️ Security Integration
-
-* Fully integrated with JWT authentication
-* Role-based access enforced using `@PreAuthorize`
-* Ownership validation inside service layer
+* AUTH_SUCCESS / AUTH_FAILED
+* ORDER_CREATED / UPDATED / CANCELLED
+* DELIVERY_ACCEPT / REJECT
+* ADMIN_FORCE_STATUS
 
 Example:
 
+```
+[AUDIT] action=ORDER_ACCEPTED userId=5 role=ROLE_DELIVERY
+```
+
+---
+
+## 🔥 Rate Limiting (Anti-Brute Force)
+
+* Max 5 failed attempts per IP
+* 5-minute window
+* Returns HTTP 429 when exceeded
+* Thread-safe implementation (ConcurrentHashMap)
+
+---
+
+## 🔥 Secure JWT Design
+
+* No roles inside JWT
+* Roles always loaded from DB
+* Prevents privilege escalation
+
+---
+
+# 📦 Order & Tracking System
+
+## 🔄 Order Lifecycle
+
+```text
+PENDING → ASSIGNED → ACCEPTED → IN_PROGRESS → DELIVERED
+↘
+REJECTED / CANCELLED
+```
+
+---
+
+## 🧠 Domain-Driven Design
+
+Business logic inside entity:
+
 ```java
-if (!order.isAssignedToDelivery(userId)) {
-    throw UnauthorizedOrderAccessException;
-}
+order.accept();
+order.reject();
+order.markDelivered();
 ```
+
+✔ Prevents invalid transitions
+✔ Keeps logic centralized
 
 ---
 
-## 📡 API Overview
+## 📊 Tracking System (Audit Trail)
 
-### Create Order
+Every state change creates a tracking record:
 
-```
+* previous_status
+* new_status
+* changed_by
+* timestamp
+* location
+
+---
+
+# ⚙️ Core Services
+
+## OrderService
+
+Handles:
+
+* Create Order
+* Accept / Reject
+* Update Status
+* Cancel Order
+* Admin Force Update
+
+✔ Includes validation + concurrency handling + audit logging
+
+---
+
+## OrderQueryService
+
+* Filtering
+* Company orders
+* Delivery orders
+
+✔ Uses Specification pattern
+
+---
+
+## OrderAssignmentService
+
+* Assigns delivery users randomly (MVP)
+* Based on ROLE_DELIVERY users
+
+---
+
+# 👨‍💼 Admin Module
+
+### Features:
+
+* Filter all orders
+* Force order status
+
+### Rules:
+
+Admin can force only:
+
+* IN_PROGRESS
+* DELIVERED
+* CANCELLED
+
+---
+
+# 🛡️ Validation Layer
+
+OrderValidator:
+
+* validateOwnership
+* validateDeliveryAccess
+* validateTransition
+
+---
+
+# ⚡ Concurrency Handling
+
+* Uses Optimistic Locking (@Version)
+* Prevents race conditions
+
+---
+
+# 🌐 API Endpoints
+
+## 🔐 Authentication
+
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+
+---
+
+## 🏢 Company
+
 POST /api/orders
-```
-
----
-
-### Get Orders
-
-```
 GET /api/orders/my
-```
-
----
-
-### Update Status
-
-```
-PUT /api/orders/{orderNumber}/status
-```
-
----
-
-### Tracking
-
-```
+GET /api/orders/{orderNumber}
 GET /api/orders/{orderNumber}/tracking
+
+---
+
+## 🚚 Delivery
+
+GET /api/delivery/orders/assigned
+POST /api/delivery/orders/{orderNumber}/accept
+POST /api/delivery/orders/{orderNumber}/reject
+PUT /api/orders/{orderNumber}/status
+
+---
+
+## 🛡️ Admin
+
+GET /api/admin/orders
+PUT /api/admin/orders/{orderNumber}/force-status
+
+---
+
+# 🔄 Order Status Values
+
+PENDING
+ASSIGNED
+ACCEPTED
+IN_PROGRESS
+DELIVERED
+REJECTED
+CANCELLED
+
+---
+
+# 📡 API Documentation
+
+```
+http://localhost:8080/swagger-ui/index.html
 ```
 
 ---
 
-## ⚖️ Trade-offs
+# 🧪 Edge Cases Handled
 
-| Decision          | Trade-off             |
-| ----------------- | --------------------- |
-| Tracking table    | More storage usage    |
-| Entity logic      | More complex entities |
-| Simple assignment | Not optimized yet     |
-
----
-
-## 🧪 Edge Cases Handled
-
-* Invalid status transitions
+* Invalid state transitions
 * Unauthorized access
-* Missing delivery assignment
-* Order not found
+* Expired tokens
+* Reused refresh tokens
 * Concurrent updates
+* Rate limit exceeded
 
 ---
 
-## 🎯 What This Module Demonstrates
+# 🧰 Tech Stack
 
-* Business-driven design
-* State machine handling
-* Audit logging system
-* Secure multi-role access
-* Clean separation of read/write logic
-
-````
-## 🚧 Current Status
-
-- ✅ Authentication system
-- ✅ RBAC implementation
-- ✅ Order management 
-- ⏳ Delivery workflow
-- ⏳ Admin dashboard
+| Category   | Technology            |
+| ---------- | --------------------- |
+| Language   | Java 21               |
+| Framework  | Spring Boot           |
+| Security   | Spring Security + JWT |
+| ORM        | Spring Data JPA       |
+| Database   | PostgreSQL            |
+| Build Tool | Maven                 |
+| Docs       | Swagger               |
 
 ---
 
-## 👨‍💻 Author
+# 🚀 How to Run
 
-Mahmoud Youssef  
+```bash
+git clone <repo>
+cd logibridge-backend
+mvn clean install
+mvn spring-boot:run
+```
+
+---
+
+# 🔐 Configuration
+
+Create:
+
+```
+application.properties
+```
+
+Example:
+
+```
+auth.jwt.secret=your-secret
+auth.jwt.expiration=900000
+```
+
+---
+
+# 🎯 Highlights (For Interviews)
+
+* Designed **JWT + Refresh Token Rotation system**
+* Built **RBAC with DB-driven roles**
+* Implemented **order lifecycle state machine**
+* Added **audit logging system**
+* Implemented **rate limiting for security**
+* Applied **DDD principles in entity layer**
+* Handled **concurrency with optimistic locking**
+
+---
+
+# 👨‍💻 Author
+
+Mahmoud Youssef
 Backend Engineer (Spring Boot)
 
 ---
 
-## 🏁 Final Result
+# 🏁 Final Result
 
-✔ Secure  
-✔ Scalable  
-✔ Production-ready  
-✔ Designed for real-world usage  
-```
+✔ Secure
+✔ Scalable
+✔ Clean architecture
+✔ Production-ready
+✔ Real-world backend system
+
+---
