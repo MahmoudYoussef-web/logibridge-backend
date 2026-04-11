@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.validation.annotation.Validated;
 
 import java.time.Instant;
@@ -32,7 +33,6 @@ public class OrderService {
     private final OrderAssignmentService orderAssignmentService;
     private final OrderValidator orderValidator;
 
-    // ==================== AUDIT HELPER ====================
 
     private void logAudit(String action, Long userId, String role, String orderNumber) {
         log.info("[AUDIT] action={} userId={} role={} order={} timestamp={}",
@@ -43,27 +43,24 @@ public class OrderService {
                 Instant.now());
     }
 
-    // ========================= CREATE =========================
+
 
     @Transactional
     public OrderResponse createOrder(@Valid CreateOrderRequest request, Long companyId) {
         log.info("Creating order for companyId={}", companyId);
 
-        String orderNumber = orderNumberGenerator.generate();
-
-        Order order = Order.create(request, companyId, orderNumber);
-        Order persisted = orderRepository.save(order);
+        Order persisted = saveWithRetry(request, companyId);
 
         Long deliveryCompanyId = orderAssignmentService.assignDelivery(request);
+
+
         persisted.assign(deliveryCompanyId, companyId, null);
 
-        logAudit("ORDER_CREATED", companyId, "ROLE_COMPANY", orderNumber);
-        logAudit("ORDER_ASSIGNED", companyId, "ROLE_COMPANY", orderNumber);
+        logAudit("ORDER_CREATED", companyId, "ROLE_COMPANY", persisted.getOrderNumber());
+        logAudit("ORDER_ASSIGNED", companyId, "ROLE_COMPANY", persisted.getOrderNumber());
 
         return orderMapper.toResponse(persisted);
     }
-
-    // ========================= COMPANY =========================
 
     @Transactional
     public OrderResponse cancelOrder(String orderNumber, Long companyId) {
@@ -86,7 +83,7 @@ public class OrderService {
         return orderMapper.toResponse(order);
     }
 
-    // ========================= DELIVERY =========================
+
 
     @Transactional
     public OrderResponse acceptOrder(String orderNumber, Long deliveryCompanyId) {
@@ -146,7 +143,6 @@ public class OrderService {
 
         try {
             orderValidator.validateTransition(order, request.getStatus());
-
             applyStatusTransition(order, request.getStatus(), deliveryCompanyId, request.getLocation());
 
         } catch (IllegalStateException ex) {
@@ -161,7 +157,7 @@ public class OrderService {
         return orderMapper.toResponse(order);
     }
 
-    // ========================= ADMIN =========================
+
 
     @Transactional
     public OrderResponse adminForceUpdateStatus(
@@ -192,7 +188,6 @@ public class OrderService {
         return orderMapper.toResponse(order);
     }
 
-    // ========================= HELPERS =========================
 
     private void applyStatusTransition(
             Order order,
@@ -202,8 +197,8 @@ public class OrderService {
     ) {
         switch (target) {
             case IN_PROGRESS -> order.markInProgress(actorId, location);
-            case DELIVERED   -> order.markDelivered(actorId, location);
-            case CANCELLED   -> order.cancel(actorId, location);
+            case DELIVERED -> order.markDelivered(actorId, location);
+            case CANCELLED -> order.cancel(actorId, location);
             default -> throw new InvalidOrderStateException(
                     "Direct transition to [" + target + "] not allowed here.");
         }
@@ -212,8 +207,8 @@ public class OrderService {
     private void applyAdminTransition(Order order, OrderStatus status, Long adminId) {
         switch (status) {
             case IN_PROGRESS -> order.markInProgress(adminId, "ADMIN_OVERRIDE");
-            case DELIVERED   -> order.markDelivered(adminId, "ADMIN_OVERRIDE");
-            case CANCELLED   -> order.cancel(adminId, "ADMIN_OVERRIDE");
+            case DELIVERED -> order.markDelivered(adminId, "ADMIN_OVERRIDE");
+            case CANCELLED -> order.cancel(adminId, "ADMIN_OVERRIDE");
             default -> throw new InvalidOrderStateException("Unsupported admin status: " + status);
         }
     }
@@ -222,5 +217,22 @@ public class OrderService {
         return status == OrderStatus.IN_PROGRESS
                 || status == OrderStatus.DELIVERED
                 || status == OrderStatus.CANCELLED;
+    }
+
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    protected Order saveWithRetry(CreateOrderRequest request, Long companyId) {
+        int attempt = 0;
+        while (true) {
+            try {
+                String orderNumber = orderNumberGenerator.generate();
+                return orderRepository.save(Order.create(request, companyId, orderNumber));
+            } catch (DataIntegrityViolationException ex) {
+                if (++attempt >= 3) {
+                    log.error("Could not generate unique order number after {} attempts", attempt);
+                    throw ex;
+                }
+                log.warn("Order number collision — retrying (attempt {})", attempt);
+            }
+        }
     }
 }

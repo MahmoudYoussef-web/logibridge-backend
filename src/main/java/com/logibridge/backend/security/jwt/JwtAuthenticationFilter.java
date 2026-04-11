@@ -10,7 +10,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -37,45 +36,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        String ip = extractClientIp(request);
         String token = extractToken(request);
-
-
-        if (!rateLimiter.isAllowed(ip)) {
-            response.setStatus(429);
-            response.getWriter().write("Too many requests. Try again later.");
-            return;
-        }
 
         if (token == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        String ip = extractClientIp(request);
+
         try {
-            if (!jwtService.isValid(token)) {
-                rateLimiter.recordFailure(ip);
-                logAudit("AUTH_FAILED", null, null, null, ip);
+
+            JwtService.ParsedToken parsed = jwtService.parseAndValidate(token);
+
+            if (!parsed.isAccessToken()) {
+                // Refresh tokens hitting protected endpoints = failed auth attempt
+                if (rejectAndRecord(ip, response, "INVALID_TOKEN_TYPE")) return;
                 filterChain.doFilter(request, response);
                 return;
             }
 
-            if (!jwtService.isAccessToken(token)) {
-                rateLimiter.recordFailure(ip);
-                logAudit("INVALID_TOKEN", null, null, null, ip);
-                filterChain.doFilter(request, response);
-                return;
-            }
-
-            String email = jwtService.extractUsername(token);
+            String email = parsed.username();
 
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
                 if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
-                    rateLimiter.recordFailure(ip);
-                    logAudit("AUTH_FAILED", null, null, null, ip);
+                    if (rejectAndRecord(ip, response, "ACCOUNT_DISABLED")) return;
                     SecurityContextHolder.clearContext();
                     filterChain.doFilter(request, response);
                     return;
@@ -83,56 +71,68 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(
-                                userDetails,
-                                null,
-                                userDetails.getAuthorities()
-                        );
+                                userDetails, null, userDetails.getAuthorities());
 
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
 
-
                 rateLimiter.reset(ip);
 
-                Long userId = extractUserId(userDetails);
-                String role = extractRole(userDetails);
-
-                logAudit("AUTH_SUCCESS", userId, role, null, ip);
+                logAudit("AUTH_SUCCESS", extractUserId(userDetails),
+                        extractRole(userDetails), ip);
             }
 
         } catch (JwtException ex) {
-            rateLimiter.recordFailure(ip);
-            logAudit("INVALID_TOKEN", null, null, null, ip);
+
             SecurityContextHolder.clearContext();
+            if (rejectAndRecord(ip, response, "INVALID_TOKEN")) return;
 
         } catch (UsernameNotFoundException ex) {
-            rateLimiter.recordFailure(ip);
-            logAudit("AUTH_FAILED", null, null, null, ip);
             SecurityContextHolder.clearContext();
+            if (rejectAndRecord(ip, response, "AUTH_FAILED")) return;
 
         } catch (Exception ex) {
-            rateLimiter.recordFailure(ip);
-            log.error("Unexpected authentication error", ex);
-            logAudit("AUTH_FAILED", null, null, null, ip);
+            log.error("Unexpected error during JWT authentication from ip={}", ip, ex);
             SecurityContextHolder.clearContext();
+            if (rejectAndRecord(ip, response, "AUTH_ERROR")) return;
         }
 
         filterChain.doFilter(request, response);
     }
 
-    // ==================== HELPERS ====================
+    private boolean rejectAndRecord(String ip,
+                                    HttpServletResponse response,
+                                    String auditAction) throws IOException {
+        boolean blocked = !rateLimiter.checkAndRecord(ip);
+        logAudit(auditAction, null, null, ip);
+        if (blocked) {
+            response.setStatus(429);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"Too many requests. Try again later.\"}");
+            return true;
+        }
+        return false;
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ") || header.length() <= 7) {
+            return null;
+        }
+        return header.substring(7);
+    }
 
     private String extractClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip != null && !ip.isBlank()) {
-            return ip.split(",")[0].trim();
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
         }
         return request.getRemoteAddr();
     }
 
     private Long extractUserId(UserDetails userDetails) {
-        if (userDetails instanceof CustomUserDetails customUser) {
-            return customUser.getId();
+        if (userDetails instanceof CustomUserDetails cu) {
+            return cu.getId();
         }
         return null;
     }
@@ -144,27 +144,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 .orElse("ROLE_UNKNOWN");
     }
 
-    private String extractToken(HttpServletRequest request) {
-        String header = request.getHeader("Authorization");
-
-        if (header == null || !header.startsWith("Bearer ") || header.length() <= 7) {
-            return null;
-        }
-
-        return header.substring(7);
-    }
-
-    private void logAudit(String action,
-                          Long userId,
-                          String role,
-                          String orderNumber,
-                          String ip) {
-
-        log.info("[AUDIT] action={} userId={} role={} order={} ip={} timestamp={}",
+    private void logAudit(String action, Long userId, String role, String ip) {
+        log.info("[AUDIT] action={} userId={} role={} ip={} timestamp={}",
                 action,
                 userId != null ? userId : "N/A",
-                role != null ? role : "N/A",
-                orderNumber != null ? orderNumber : "-",
+                role   != null ? role   : "N/A",
                 ip,
                 Instant.now());
     }

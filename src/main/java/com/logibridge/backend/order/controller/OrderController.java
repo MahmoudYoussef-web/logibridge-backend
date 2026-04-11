@@ -4,7 +4,6 @@ import com.logibridge.backend.order.dto.CreateOrderRequest;
 import com.logibridge.backend.order.dto.OrderResponse;
 import com.logibridge.backend.order.dto.OrderTrackingResponse;
 import com.logibridge.backend.order.dto.UpdateOrderStatusRequest;
-import com.logibridge.backend.order.enums.OrderStatus;
 import com.logibridge.backend.order.service.OrderQueryService;
 import com.logibridge.backend.order.service.OrderService;
 import com.logibridge.backend.security.service.CustomUserDetails;
@@ -13,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,7 +19,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
@@ -31,7 +28,7 @@ public class OrderController {
     private final OrderService orderService;
     private final OrderQueryService orderQueryService;
 
-
+    // ========================= COMPANY =========================
 
     @PostMapping("/api/orders")
     @PreAuthorize("hasRole('COMPANY')")
@@ -52,26 +49,9 @@ public class OrderController {
         return ResponseEntity.ok(orderQueryService.getCompanyOrders(companyId, pageable));
     }
 
+    // 🟡 FIX: Removed duplicate GET /api/orders/admin — this lives in AdminOrderController
 
-
-    @GetMapping("/api/orders/admin")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Page<OrderResponse>> filterOrders(
-            @RequestParam(required = false) Long companyId,
-            @RequestParam(required = false) Long deliveryCompanyId,
-            @RequestParam(required = false) OrderStatus status,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
-    ) {
-        return ResponseEntity.ok(
-                orderQueryService.filterOrders(
-                        companyId, deliveryCompanyId, status, fromDate, toDate, pageable));
-    }
-
-
+    // ========================= SHARED =========================
 
     @GetMapping("/api/orders/{orderNumber}")
     @PreAuthorize("hasAnyRole('COMPANY','DELIVERY','ADMIN')")
@@ -88,18 +68,6 @@ public class OrderController {
         );
     }
 
-    @PutMapping("/api/orders/{orderNumber}/status")
-    @PreAuthorize("hasRole('DELIVERY')")
-    public ResponseEntity<OrderResponse> updateOrderStatus(
-            @PathVariable String orderNumber,
-            @Valid @RequestBody UpdateOrderStatusRequest request
-    ) {
-        Long deliveryId = getCurrentUser().getId();
-        return ResponseEntity.ok(
-                orderService.updateOrderStatus(orderNumber, request, deliveryId)
-        );
-    }
-
     @GetMapping("/api/orders/{orderNumber}/tracking")
     @PreAuthorize("hasAnyRole('COMPANY','DELIVERY','ADMIN')")
     public ResponseEntity<List<OrderTrackingResponse>> getTracking(
@@ -111,12 +79,24 @@ public class OrderController {
                 orderQueryService.getOrderTracking(
                         orderNumber,
                         user.getId(),
-                        user.getAuthorities() // 🔥 FIX
+                        user.getAuthorities()
                 )
         );
     }
 
+    // ========================= DELIVERY =========================
 
+    @PutMapping("/api/orders/{orderNumber}/status")
+    @PreAuthorize("hasRole('DELIVERY')")
+    public ResponseEntity<OrderResponse> updateOrderStatus(
+            @PathVariable String orderNumber,
+            @Valid @RequestBody UpdateOrderStatusRequest request
+    ) {
+        Long deliveryId = getCurrentUser().getId();
+        return ResponseEntity.ok(
+                orderService.updateOrderStatus(orderNumber, request, deliveryId)
+        );
+    }
 
     @GetMapping("/api/delivery/orders/assigned")
     @PreAuthorize("hasRole('DELIVERY')")
@@ -151,7 +131,7 @@ public class OrderController {
         );
     }
 
-
+    // ========================= HELPER =========================
 
     private CustomUserDetails getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

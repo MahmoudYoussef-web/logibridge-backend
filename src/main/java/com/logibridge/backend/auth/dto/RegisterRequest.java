@@ -1,6 +1,5 @@
 package com.logibridge.backend.auth.dto;
 
-import com.logibridge.backend.auth.enums.RoleName;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
@@ -35,5 +34,4 @@ public class RegisterRequest {
     private String phoneNumber;
 
 
-    private RoleName role;
 }

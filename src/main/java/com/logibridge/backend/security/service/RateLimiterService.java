@@ -10,53 +10,50 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class RateLimiterService {
 
-    private static final int MAX_ATTEMPTS = 5;
+    private static final int  MAX_ATTEMPTS   = 5;
     private static final long WINDOW_SECONDS = 300; // 5 minutes
 
     private final ConcurrentHashMap<String, Attempt> attempts = new ConcurrentHashMap<>();
 
-    public boolean isAllowed(String ip) {
-        Attempt attempt = attempts.get(ip);
 
-        if (attempt == null) return true;
-
-        if (attempt.isExpired()) {
-            attempts.remove(ip);
-            return true;
-        }
-
-        return attempt.count < MAX_ATTEMPTS;
-    }
-
-    public void recordFailure(String ip) {
-        attempts.compute(ip, (key, attempt) -> {
-            if (attempt == null || attempt.isExpired()) {
+    public boolean checkAndRecord(String key) {
+        Attempt result = attempts.compute(key, (k, current) -> {
+            if (current == null || current.isExpired()) {
                 return new Attempt(1);
             }
-            attempt.increment();
-            return attempt;
+            current.increment();
+            return current;
         });
+
+        boolean withinLimit = result.count <= MAX_ATTEMPTS;
+
+        if (!withinLimit) {
+            log.warn("[RATE-LIMIT] key={} blocked — {} failed attempts in {}s window",
+                    key, result.count, WINDOW_SECONDS);
+        }
+
+        return withinLimit;
     }
 
-    public void reset(String ip) {
-        attempts.remove(ip);
+    public void reset(String key) {
+        attempts.remove(key);
     }
+
+
 
     private static class Attempt {
         int count;
-        Instant start;
+        final Instant windowStart;
 
         Attempt(int count) {
-            this.count = count;
-            this.start = Instant.now();
+            this.count       = count;
+            this.windowStart = Instant.now();
         }
 
-        void increment() {
-            this.count++;
-        }
+        void increment() { this.count++; }
 
         boolean isExpired() {
-            return Instant.now().isAfter(start.plusSeconds(WINDOW_SECONDS));
+            return Instant.now().isAfter(windowStart.plusSeconds(WINDOW_SECONDS));
         }
     }
 }

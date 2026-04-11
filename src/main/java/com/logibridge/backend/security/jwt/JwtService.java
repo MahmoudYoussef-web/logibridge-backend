@@ -20,20 +20,17 @@ public class JwtService {
     @Value("${auth.jwt.expiration}")
     private long expiration;
 
-    private Key getKey() {
-        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
-    }
 
 
     public String generateToken(CustomUserDetails user) {
 
-        Date now = new Date();
+        Date now    = new Date();
         Date expiry = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
-                .setSubject(user.getUsername())   // email
-                .claim("uid", user.getId())       // user id
-                .claim("type", "ACCESS")          // token type
+                .setSubject(user.getUsername())
+                .claim("uid",  user.getId())
+                .claim("type", "ACCESS")
                 .setIssuedAt(now)
                 .setExpiration(expiry)
                 .setIssuer("logibridge")
@@ -42,15 +39,27 @@ public class JwtService {
     }
 
 
+    public ParsedToken parseAndValidate(String token) {
+        Claims claims = parse(token).getBody(); // throws JwtException if invalid/expired
+        String username    = claims.getSubject();
+        String type        = claims.get("type", String.class);
+        boolean isAccess   = "ACCESS".equalsIgnoreCase(type);
+        return new ParsedToken(username, isAccess);
+    }
+
     public String extractUsername(String token) {
         return parse(token).getBody().getSubject();
     }
 
-
-    public List<String> extractRoles(String token) {
-        return List.of(); // always empty — DO NOT use for authorization
+    public boolean isValid(String token) {
+        try {
+            Claims claims = parse(token).getBody();
+            return claims.getExpiration() != null
+                    && !claims.getExpiration().before(new Date());
+        } catch (JwtException | IllegalArgumentException ex) {
+            return false;
+        }
     }
-
 
     public boolean isAccessToken(String token) {
         try {
@@ -62,20 +71,22 @@ public class JwtService {
     }
 
 
-    public boolean isValid(String token) {
-        try {
-            Claims claims = parse(token).getBody();
-            return claims.getExpiration() != null &&
-                    !claims.getExpiration().before(new Date());
-        } catch (JwtException | IllegalArgumentException ex) {
-            return false;
-        }
+    public List<String> extractRoles(String token) {
+        return List.of();
     }
+
+
+    public record ParsedToken(String username, boolean isAccessToken) {}
+
 
     private Jws<Claims> parse(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getKey())
                 .build()
                 .parseClaimsJws(token);
+    }
+
+    private Key getKey() {
+        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
     }
 }

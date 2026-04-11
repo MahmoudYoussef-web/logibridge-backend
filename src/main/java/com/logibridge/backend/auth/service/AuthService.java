@@ -33,7 +33,16 @@ public class AuthService {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
 
-    public AuthResponse register(RegisterRequest request) {
+
+    public AuthResponse registerCompany(RegisterRequest request) {
+        return register(request, RoleName.ROLE_COMPANY);
+    }
+
+    public AuthResponse registerDelivery(RegisterRequest request) {
+        return register(request, RoleName.ROLE_DELIVERY);
+    }
+
+    private AuthResponse register(RegisterRequest request, RoleName roleName) {
 
         String email = request.getEmail().toLowerCase().trim();
 
@@ -42,24 +51,19 @@ public class AuthService {
             throw new ConflictException("Email already in use");
         }
 
-        String encodedPassword = passwordEncoder.encode(request.getPassword());
-
-        User user = AuthMapper.toUser(request, encodedPassword);
-
-        // Use role from request; fall back to ROLE_COMPANY for backward compatibility
-        RoleName roleName = (request.getRole() != null) ? request.getRole() : RoleName.ROLE_COMPANY;
+        User user = AuthMapper.toUser(request, passwordEncoder.encode(request.getPassword()));
 
         Role role = roleRepository.findByName(roleName)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
 
         user.addRole(role);
-
         userRepository.save(user);
 
-        log.info("User registered successfully: email={}, role={}", email, roleName);
+        log.info("User registered: email={}, role={}", email, roleName);
 
         return generateAuthResponse(user);
     }
+
 
     public AuthResponse login(LoginRequest request) {
 
@@ -71,11 +75,10 @@ public class AuthService {
             );
 
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-            User user = userDetails.getUser();
 
-            log.info("User logged in successfully: email={}", email);
+            log.info("User logged in: email={}", email);
 
-            return generateAuthResponse(user);
+            return generateAuthResponse(userDetails.getUser());
 
         } catch (AuthenticationException ex) {
             log.warn("Login failed for email={}: {}", email, ex.getMessage());
@@ -83,16 +86,15 @@ public class AuthService {
         }
     }
 
+
     public AuthResponse refresh(RefreshTokenRequest request) {
 
         RefreshToken newToken = refreshTokenService.rotate(request.getRefreshToken());
-
-        User user = newToken.getUser();
-
-        String accessToken = jwtService.generateToken(CustomUserDetails.from(user));
+        String accessToken = jwtService.generateToken(CustomUserDetails.from(newToken.getUser()));
 
         return AuthResponse.of(accessToken, newToken.getTokenHash());
     }
+
 
     public void logout(String refreshToken) {
 
@@ -114,11 +116,10 @@ public class AuthService {
         refreshTokenService.deleteAllByUser(user);
     }
 
+
     private AuthResponse generateAuthResponse(User user) {
-
-        String accessToken = jwtService.generateToken(CustomUserDetails.from(user));
-        RefreshToken refreshToken = refreshTokenService.create(user);
-
-        return AuthResponse.of(accessToken, refreshToken.getTokenHash());
+        String accessToken   = jwtService.generateToken(CustomUserDetails.from(user));
+        RefreshToken refresh = refreshTokenService.create(user);
+        return AuthResponse.of(accessToken, refresh.getTokenHash());
     }
 }
