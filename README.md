@@ -207,6 +207,70 @@ OrderValidator:
 * Uses Optimistic Locking (@Version)
 * Prevents race conditions
 
+
+---
+# 🚀 How to Run
+````markdown
+# 🐳 Docker Setup
+
+Run the entire system (Backend + Database) using Docker.
+
+---
+
+## 🔧 Requirements
+
+- Docker Desktop installed
+
+---
+
+## 🚀 Run the project
+
+```bash
+docker-compose up --build
+````
+
+---
+
+## 🌐 Access the application
+
+* API:
+  [http://localhost:8080](http://localhost:8080)
+
+* Swagger UI:
+  [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+
+---
+
+## 🧱 Services
+
+| Service  | Description         |
+| -------- | ------------------- |
+| app      | Spring Boot backend |
+| postgres | PostgreSQL database |
+
+---
+
+## ⚙️ Environment Variables
+
+Configured inside `docker-compose.yml`:
+
+* SPRING_DATASOURCE_URL
+* SPRING_DATASOURCE_USERNAME
+* SPRING_DATASOURCE_PASSWORD
+* AUTH_JWT_SECRET
+
+---
+
+## 📝 Notes
+
+* First build may take a few minutes
+* Subsequent runs are faster
+* Uses PostgreSQL inside container
+
+---
+
+```
+```
 ---
 
 # 🌐 API Endpoints
