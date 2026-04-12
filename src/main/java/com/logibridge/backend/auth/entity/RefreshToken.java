@@ -64,6 +64,7 @@ public class RefreshToken extends BaseEntity {
     @Column(name = "replaced_by_token")
     private String replacedByToken;
 
+
     public boolean isActive() {
         return !revoked && !isExpired();
     }

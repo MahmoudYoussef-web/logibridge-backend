@@ -3,6 +3,7 @@ package com.logibridge.backend.auth.service;
 import com.logibridge.backend.auth.dto.*;
 import com.logibridge.backend.auth.entity.*;
 import com.logibridge.backend.auth.enums.RoleName;
+import com.logibridge.backend.auth.enums.UserStatus;
 import com.logibridge.backend.auth.mapper.AuthMapper;
 import com.logibridge.backend.auth.repository.*;
 import com.logibridge.backend.common.exception.*;
@@ -53,6 +54,10 @@ public class AuthService {
 
         User user = AuthMapper.toUser(request, passwordEncoder.encode(request.getPassword()));
 
+
+        user.setStatus(UserStatus.ACTIVE);
+        user.setEnabled(true);
+
         Role role = roleRepository.findByName(roleName)
                 .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
 
@@ -75,6 +80,12 @@ public class AuthService {
             );
 
             CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+
+
+            if (userDetails.getUser().getStatus() != UserStatus.ACTIVE) {
+                log.warn("Login blocked — user not active: {}", email);
+                throw new UnauthorizedException("Account not active");
+            }
 
             log.info("User logged in: email={}", email);
 

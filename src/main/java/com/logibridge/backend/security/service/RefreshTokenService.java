@@ -43,11 +43,10 @@ public class RefreshTokenService {
     @Transactional
     public RefreshToken rotate(String tokenHash) {
 
-        //  LOCK row to prevent race conditions
-        RefreshToken oldToken = repository.findByTokenHash(tokenHash)
+        RefreshToken oldToken = repository.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
 
-        //  Reuse detection FIRST
+        // reuse detection
         if (oldToken.isRevoked()) {
             handleReuseAttack(oldToken);
             throw new InvalidTokenException("Refresh token reuse detected");
@@ -57,11 +56,13 @@ public class RefreshTokenService {
             throw new InvalidTokenException("Refresh token expired");
         }
 
-        //  revoke old token
+        if (oldToken.getReplacedByToken() != null) {
+            throw new InvalidTokenException("Token already rotated");
+        }
+
         oldToken.setRevoked(true);
         oldToken.setRevokedAt(Instant.now());
 
-        // create new token
         RefreshToken newToken = RefreshToken.builder()
                 .user(oldToken.getUser())
                 .tokenHash(generateToken())

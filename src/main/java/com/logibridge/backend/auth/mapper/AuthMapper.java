@@ -2,6 +2,7 @@ package com.logibridge.backend.auth.mapper;
 
 import com.logibridge.backend.auth.dto.RegisterRequest;
 import com.logibridge.backend.auth.entity.User;
+import com.logibridge.backend.auth.enums.UserStatus;
 
 public class AuthMapper {
 
@@ -14,6 +15,13 @@ public class AuthMapper {
                 .email(request.getEmail())
                 .passwordHash(encodedPassword)
                 .phoneNumber(request.getPhoneNumber())
+
+
+                .status(UserStatus.ACTIVE)
+                .enabled(true)
+                .accountNonLocked(true)
+                .emailVerified(true)
+
                 .build();
     }
 }

@@ -63,16 +63,21 @@ public class User extends BaseEntity {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified = false;
 
+    @Builder.Default
     @Column(name = "account_non_locked", nullable = false)
     private boolean accountNonLocked = true;
-
     @Column(name = "enabled", nullable = false)
     private boolean enabled = true;
+
+
 
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UserRole> userRoles = new ArrayList<>();
 
+    @Builder.Default
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<RefreshToken> refreshTokens = new ArrayList<>();
 
     public void addRole(Role role) {
         if (role == null) return;

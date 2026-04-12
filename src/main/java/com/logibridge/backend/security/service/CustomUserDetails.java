@@ -2,6 +2,7 @@ package com.logibridge.backend.security.service;
 
 import com.logibridge.backend.auth.entity.User;
 import com.logibridge.backend.auth.entity.UserRole;
+import com.logibridge.backend.auth.enums.UserStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.springframework.security.core.*;
@@ -40,7 +41,17 @@ public class CustomUserDetails implements UserDetails {
 
     @Override public String getUsername() { return email; }
     @Override public boolean isAccountNonExpired() { return true; }
-    @Override public boolean isAccountNonLocked() { return accountNonLocked; }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return accountNonLocked && user.getStatus() != UserStatus.BANNED;
+    }
+
     @Override public boolean isCredentialsNonExpired() { return true; }
-    @Override public boolean isEnabled() { return enabled; }
+
+
+    @Override
+    public boolean isEnabled() {
+        return user.getStatus() == UserStatus.ACTIVE;
+    }
 }

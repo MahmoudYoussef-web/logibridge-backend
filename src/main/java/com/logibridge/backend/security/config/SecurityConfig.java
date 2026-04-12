@@ -66,22 +66,26 @@ public class SecurityConfig {
                                 "/swagger-ui.html"
                         ).permitAll()
 
-                        // Public
+                        // Public Auth APIs
                         .requestMatchers(
                                 "/api/auth/login",
-                                "/api/auth/register",
+                                "/api/auth/register/**",
                                 "/api/auth/refresh"
                         ).permitAll()
 
-                        .requestMatchers("/api/auth/logout", "/api/auth/logout-all")
-                        .authenticated()
+                        // Authenticated only
+                        .requestMatchers(
+                                "/api/auth/logout",
+                                "/api/auth/logout-all"
+                        ).authenticated()
 
                         // Role-based
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/orders/**").authenticated()
                         .requestMatchers("/api/delivery/**").hasRole("DELIVERY")
+                        .requestMatchers("/api/orders/**").authenticated()
 
                         .anyRequest().authenticated()
+
                 );
 
         http.authenticationProvider(authProvider());
