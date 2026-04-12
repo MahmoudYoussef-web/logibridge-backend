@@ -16,6 +16,7 @@ public class ApiErrorResponse {
     private final String errorCode;
     private final String path;
     private final Instant timestamp;
+
     private final Map<String, String> errors;
 
     public ApiErrorResponse(int status, String message, String errorCode, String path) {

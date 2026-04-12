@@ -9,7 +9,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -18,14 +19,11 @@ import java.util.Map;
 @Slf4j
 public class GlobalExceptionHandler {
 
-    //  CUSTOM API EXCEPTIONS
-
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApiException(
             ApiException ex,
             HttpServletRequest request
     ) {
-
         log.warn("API Exception [{}]: {} path={}",
                 ex.getErrorCode(),
                 ex.getMessage(),
@@ -42,18 +40,12 @@ public class GlobalExceptionHandler {
         );
     }
 
-    //  TOKEN EXCEPTIONS
-
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidToken(
             InvalidTokenException ex,
             HttpServletRequest request
     ) {
-
-        log.warn("Invalid token path={} msg={}",
-                request.getRequestURI(),
-                ex.getMessage()
-        );
+        log.warn("Invalid token path={} msg={}", request.getRequestURI(), ex.getMessage());
 
         return ResponseEntity.status(401).body(
                 ApiErrorResponse.of(
@@ -65,24 +57,18 @@ public class GlobalExceptionHandler {
         );
     }
 
-    //  VALIDATION
-
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiErrorResponse> handleValidation(
             MethodArgumentNotValidException ex,
             HttpServletRequest request
     ) {
-
         Map<String, String> errors = new HashMap<>();
 
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
             errors.put(error.getField(), error.getDefaultMessage());
         }
 
-        log.warn("Validation failed path={} errors={}",
-                request.getRequestURI(),
-                errors
-        );
+        log.warn("Validation failed path={} errors={}", request.getRequestURI(), errors);
 
         return ResponseEntity.badRequest().body(
                 new ApiErrorResponse(
@@ -95,23 +81,17 @@ public class GlobalExceptionHandler {
         );
     }
 
-    //  SECURITY
-
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiErrorResponse> handleAuth(
             AuthenticationException ex,
             HttpServletRequest request
     ) {
-
-        log.warn("Authentication failed path={} msg={}",
-                request.getRequestURI(),
-                ex.getMessage()
-        );
+        log.warn("Authentication failed path={} msg={}", request.getRequestURI(), ex.getMessage());
 
         return ResponseEntity.status(401).body(
                 ApiErrorResponse.of(
                         401,
-                        ex.getMessage(), //  keep original message
+                        ex.getMessage(),
                         "UNAUTHORIZED",
                         request.getRequestURI()
                 )
@@ -123,11 +103,7 @@ public class GlobalExceptionHandler {
             AccessDeniedException ex,
             HttpServletRequest request
     ) {
-
-        log.warn("Access denied path={} msg={}",
-                request.getRequestURI(),
-                ex.getMessage()
-        );
+        log.warn("Access denied path={} msg={}", request.getRequestURI(), ex.getMessage());
 
         return ResponseEntity.status(403).body(
                 ApiErrorResponse.of(
@@ -139,14 +115,11 @@ public class GlobalExceptionHandler {
         );
     }
 
-    //  DATABASE
-
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(
             DataIntegrityViolationException ex,
             HttpServletRequest request
     ) {
-
         log.error("Data integrity violation path={} msg={}",
                 request.getRequestURI(),
                 ex.getMostSpecificCause().getMessage()
@@ -162,14 +135,11 @@ public class GlobalExceptionHandler {
         );
     }
 
-    //  GENERIC
-
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneric(
             Exception ex,
             HttpServletRequest request
     ) {
-
         log.error("Unexpected error path={}", request.getRequestURI(), ex);
 
         return ResponseEntity.status(500).body(
