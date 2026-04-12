@@ -51,10 +51,20 @@ public class OrderQueryService {
         return orderRepository.findByCompanyId(companyId, pageable)
                 .map(orderMapper::toResponse);
     }
-
     @Transactional(readOnly = true)
     public Page<OrderResponse> getDeliveryOrders(Long deliveryCompanyId, Pageable pageable) {
-        return orderRepository.findByDeliveryCompanyId(deliveryCompanyId, pageable)
+
+        List<OrderStatus> visibleStatuses = List.of(
+                OrderStatus.ASSIGNED,
+                OrderStatus.ACCEPTED,
+                OrderStatus.IN_PROGRESS
+        );
+
+        Specification<Order> spec = Specification
+                .where(OrderSpecification.hasDeliveryCompanyId(deliveryCompanyId))
+                .and(OrderSpecification.hasStatusIn(visibleStatuses));
+
+        return orderRepository.findAll(spec, pageable)
                 .map(orderMapper::toResponse);
     }
 
@@ -75,22 +85,21 @@ public class OrderQueryService {
     }
 
     @Transactional(readOnly = true)
-    public List<OrderTrackingResponse> getOrderTracking(
+    public Page<OrderTrackingResponse> getOrderTracking(
             String orderNumber,
             Long userId,
-            Collection<? extends GrantedAuthority> authorities
+            Collection<? extends GrantedAuthority> authorities,
+            Pageable pageable
     ) {
         Order order = orderRepository.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
 
         enforceReadAccess(order, userId, authorities);
 
-        return orderTrackingRepository.findByOrderIdOrderByTimestampAsc(order.getId())
-                .stream()
-                .map(orderTrackingMapper::toResponse)
-                .toList();
+        return orderTrackingRepository
+                .findByOrderIdOrderByTimestampAsc(order.getId(), pageable)
+                .map(orderTrackingMapper::toResponse);
     }
-
     @Transactional(readOnly = true)
     public Page<OrderResponse> filterOrders(
             Long companyId,

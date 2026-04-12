@@ -7,6 +7,7 @@ import com.logibridge.backend.order.dto.UpdateOrderStatusRequest;
 import com.logibridge.backend.order.service.OrderQueryService;
 import com.logibridge.backend.order.service.OrderService;
 import com.logibridge.backend.security.service.CustomUserDetails;
+import com.logibridge.backend.common.exception.UnauthorizedException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -19,18 +20,15 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequiredArgsConstructor
+@RequestMapping("/api")
 public class OrderController {
 
     private final OrderService orderService;
     private final OrderQueryService orderQueryService;
 
-    // ========================= COMPANY =========================
-
-    @PostMapping("/api/orders")
+    @PostMapping("/orders")
     @PreAuthorize("hasRole('COMPANY')")
     public ResponseEntity<OrderResponse> createOrder(
             @Valid @RequestBody CreateOrderRequest request
@@ -40,7 +38,7 @@ public class OrderController {
                 .body(orderService.createOrder(request, companyId));
     }
 
-    @GetMapping("/api/orders/my")
+    @GetMapping("/orders/my")
     @PreAuthorize("hasRole('COMPANY')")
     public ResponseEntity<Page<OrderResponse>> getMyOrders(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
@@ -49,11 +47,7 @@ public class OrderController {
         return ResponseEntity.ok(orderQueryService.getCompanyOrders(companyId, pageable));
     }
 
-    // 🟡 FIX: Removed duplicate GET /api/orders/admin — this lives in AdminOrderController
-
-    // ========================= SHARED =========================
-
-    @GetMapping("/api/orders/{orderNumber}")
+    @GetMapping("/orders/{orderNumber}")
     @PreAuthorize("hasAnyRole('COMPANY','DELIVERY','ADMIN')")
     public ResponseEntity<OrderResponse> getOrder(@PathVariable String orderNumber) {
 
@@ -68,10 +62,11 @@ public class OrderController {
         );
     }
 
-    @GetMapping("/api/orders/{orderNumber}/tracking")
+    @GetMapping("/orders/{orderNumber}/tracking")
     @PreAuthorize("hasAnyRole('COMPANY','DELIVERY','ADMIN')")
-    public ResponseEntity<List<OrderTrackingResponse>> getTracking(
-            @PathVariable String orderNumber
+    public ResponseEntity<Page<OrderTrackingResponse>> getTracking(
+            @PathVariable String orderNumber,
+            @PageableDefault(size = 20, sort = "timestamp") Pageable pageable
     ) {
         CustomUserDetails user = getCurrentUser();
 
@@ -79,14 +74,13 @@ public class OrderController {
                 orderQueryService.getOrderTracking(
                         orderNumber,
                         user.getId(),
-                        user.getAuthorities()
+                        user.getAuthorities(),
+                        pageable
                 )
         );
     }
 
-    // ========================= DELIVERY =========================
-
-    @PutMapping("/api/orders/{orderNumber}/status")
+    @PutMapping("/orders/{orderNumber}/status")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<OrderResponse> updateOrderStatus(
             @PathVariable String orderNumber,
@@ -98,18 +92,18 @@ public class OrderController {
         );
     }
 
-    @GetMapping("/api/delivery/orders/assigned")
+    @GetMapping("/delivery/orders/assigned")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<Page<OrderResponse>> getAssignedOrders(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
     ) {
         Long deliveryId = getCurrentUser().getId();
         return ResponseEntity.ok(
-                orderQueryService.getDeliveryOrders(deliveryId, pageable)
+                orderQueryService.getAssignedOrders(deliveryId, pageable)
         );
     }
 
-    @PostMapping("/api/delivery/orders/{orderNumber}/accept")
+    @PostMapping("/delivery/orders/{orderNumber}/accept")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<OrderResponse> acceptOrder(
             @PathVariable String orderNumber
@@ -120,7 +114,7 @@ public class OrderController {
         );
     }
 
-    @PostMapping("/api/delivery/orders/{orderNumber}/reject")
+    @PostMapping("/delivery/orders/{orderNumber}/reject")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<OrderResponse> rejectOrder(
             @PathVariable String orderNumber
@@ -131,10 +125,25 @@ public class OrderController {
         );
     }
 
-    // ========================= HELPER =========================
+    @PostMapping("/orders/{orderNumber}/cancel")
+    @PreAuthorize("hasRole('COMPANY')")
+    public ResponseEntity<OrderResponse> cancelOrder(
+            @PathVariable String orderNumber
+    ) {
+        Long companyId = getCurrentUser().getId();
+        return ResponseEntity.ok(
+                orderService.cancelOrder(orderNumber, companyId)
+        );
+    }
 
     private CustomUserDetails getCurrentUser() {
+
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return (CustomUserDetails) auth.getPrincipal();
+
+        if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails user)) {
+            throw new UnauthorizedException("User is not authenticated");
+        }
+
+        return user;
     }
 }

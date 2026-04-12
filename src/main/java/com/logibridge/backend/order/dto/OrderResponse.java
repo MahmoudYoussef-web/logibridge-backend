@@ -22,4 +22,6 @@ public class OrderResponse {
     private String deliveryAddress;
     private OrderStatus status;
     private LocalDateTime createdAt;
+
+    private Long trackingCount;
 }

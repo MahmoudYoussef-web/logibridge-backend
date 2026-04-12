@@ -1,7 +1,11 @@
 package com.logibridge.backend.order.exception;
 
-public class InvalidOrderStateException extends RuntimeException {
+import com.logibridge.backend.common.exception.ApiException;
+import org.springframework.http.HttpStatus;
+
+public class InvalidOrderStateException extends ApiException {
+
     public InvalidOrderStateException(String message) {
-        super(message);
+        super(message, HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_ORDER_STATE");
     }
 }

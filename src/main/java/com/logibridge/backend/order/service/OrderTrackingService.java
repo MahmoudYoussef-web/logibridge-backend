@@ -30,7 +30,6 @@ public class OrderTrackingService {
                 .newStatus(newStatus)
                 .location(location)
                 .changedBy(changedBy)
-                .timestamp(LocalDateTime.now())
                 .build();
 
         orderTrackingRepository.save(tracking);

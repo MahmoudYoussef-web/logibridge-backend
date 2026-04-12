@@ -2,12 +2,8 @@ package com.logibridge.backend.order.dto;
 
 import com.logibridge.backend.order.enums.OrderStatus;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
+import jakarta.validation.constraints.Size;
+import lombok.*;
 
 @Getter
 @Setter
@@ -19,5 +15,6 @@ public class AdminForceStatusRequest {
     @NotNull(message = "Status is required")
     private OrderStatus status;
 
+    @Size(max = 255)
     private String location;
 }

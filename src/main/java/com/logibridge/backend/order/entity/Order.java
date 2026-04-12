@@ -2,6 +2,7 @@ package com.logibridge.backend.order.entity;
 
 import com.logibridge.backend.order.dto.CreateOrderRequest;
 import com.logibridge.backend.order.enums.OrderStatus;
+import com.logibridge.backend.order.exception.InvalidOrderStateException;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -14,10 +15,12 @@ import java.util.List;
 @Table(
         name = "orders",
         indexes = {
-                @Index(name = "idx_orders_order_number",     columnList = "order_number"),
-                @Index(name = "idx_orders_company_id",       columnList = "company_id"),
+                @Index(name = "idx_orders_order_number", columnList = "order_number"),
+                @Index(name = "idx_orders_company_id", columnList = "company_id"),
                 @Index(name = "idx_orders_delivery_company", columnList = "delivery_company_id"),
-                @Index(name = "idx_orders_status",           columnList = "status")
+                @Index(name = "idx_orders_status", columnList = "status"),
+                @Index(name = "idx_orders_company_status", columnList = "company_id,status"),
+                @Index(name = "idx_orders_delivery_status", columnList = "delivery_company_id,status")
         }
 )
 @Getter
@@ -30,10 +33,10 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_number", nullable = false, unique = true)
+    @Column(name = "order_number", nullable = false, unique = true, updatable = false)
     private String orderNumber;
 
-    @Column(name = "company_id", nullable = false)
+    @Column(name = "company_id", nullable = false, updatable = false)
     private Long companyId;
 
     @Column(name = "delivery_company_id")
@@ -55,7 +58,7 @@ public class Order {
     private String deliveryAddress;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false)
     private OrderStatus status;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -83,26 +86,25 @@ public class Order {
         }
     }
 
-
     public void assign(Long deliveryCompanyId, Long actorId, String location) {
+        if (deliveryCompanyId == null) {
+            throw new InvalidOrderStateException("Delivery company id cannot be null");
+        }
         if (this.deliveryCompanyId != null) {
-            throw new IllegalStateException(
-                    "Order is already assigned to delivery company id=" + this.deliveryCompanyId);
+            throw new InvalidOrderStateException(
+                    "Order already assigned to delivery company id=" + this.deliveryCompanyId);
         }
         this.deliveryCompanyId = deliveryCompanyId;
         changeStatus(OrderStatus.ASSIGNED, actorId, location);
     }
 
-
     public void accept(Long actorId, String location) {
         changeStatus(OrderStatus.ACCEPTED, actorId, location);
     }
 
-
     public void reject(Long actorId, String location) {
         changeStatus(OrderStatus.REJECTED, actorId, location);
     }
-
 
     public void markInProgress(Long actorId, String location) {
         changeStatus(OrderStatus.IN_PROGRESS, actorId, location);
@@ -118,11 +120,17 @@ public class Order {
 
     private void changeStatus(OrderStatus newStatus, Long changedBy, String location) {
         if (this.status == null) {
-            throw new IllegalStateException("Order status is not initialized.");
+            throw new InvalidOrderStateException("Order status is not initialized.");
         }
         if (!this.status.canTransitionTo(newStatus)) {
-            throw new IllegalStateException(
+            throw new InvalidOrderStateException(
                     String.format("Invalid status transition: %s → %s", this.status, newStatus));
+        }
+        if (this.deliveryCompanyId == null &&
+                (newStatus == OrderStatus.ACCEPTED ||
+                        newStatus == OrderStatus.IN_PROGRESS ||
+                        newStatus == OrderStatus.DELIVERED)) {
+            throw new InvalidOrderStateException("Order must be assigned before delivery actions");
         }
 
         OrderTracking tracking = OrderTracking.builder()
@@ -131,13 +139,11 @@ public class Order {
                 .newStatus(newStatus)
                 .location(location)
                 .changedBy(changedBy)
-                .timestamp(LocalDateTime.now())
                 .build();
 
         this.trackingHistory.add(tracking);
         this.status = newStatus;
     }
-
 
     public boolean isOwnedByCompany(Long companyId) {
         return this.companyId != null && this.companyId.equals(companyId);
@@ -151,7 +157,6 @@ public class Order {
         return Collections.unmodifiableList(trackingHistory);
     }
 
-
     public static OrderBuilder builder() {
         return new ValidatingOrderBuilder();
     }
@@ -160,13 +165,12 @@ public class Order {
         @Override
         public Order build() {
             if (super.weight != null && super.weight <= 0) {
-                throw new IllegalArgumentException(
+                throw new InvalidOrderStateException(
                         "Weight must be a positive value, got: " + super.weight);
             }
             return super.build();
         }
     }
-
 
     public static Order create(CreateOrderRequest request, Long companyId, String orderNumber) {
         return Order.builder()
@@ -178,6 +182,5 @@ public class Order {
                 .pickupAddress(request.getPickupAddress())
                 .deliveryAddress(request.getDeliveryAddress())
                 .build();
-
     }
 }

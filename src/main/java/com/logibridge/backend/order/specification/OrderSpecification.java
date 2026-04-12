@@ -13,25 +13,21 @@ public final class OrderSpecification {
 
     public static Specification<Order> hasCompanyId(Long companyId) {
         return (root, query, cb) ->
-                companyId == null
-                        ? cb.conjunction()
+                companyId == null ? cb.conjunction()
                         : cb.equal(root.get("companyId"), companyId);
     }
 
     public static Specification<Order> hasDeliveryCompanyId(Long deliveryCompanyId) {
         return (root, query, cb) ->
-                deliveryCompanyId == null
-                        ? cb.conjunction()
+                deliveryCompanyId == null ? cb.conjunction()
                         : cb.equal(root.get("deliveryCompanyId"), deliveryCompanyId);
     }
 
     public static Specification<Order> hasStatus(OrderStatus status) {
         return (root, query, cb) ->
-                status == null
-                        ? cb.conjunction()
+                status == null ? cb.conjunction()
                         : cb.equal(root.get("status"), status);
     }
-
 
     public static Specification<Order> hasStatusIn(List<OrderStatus> statuses) {
         return (root, query, cb) ->
@@ -42,15 +38,13 @@ public final class OrderSpecification {
 
     public static Specification<Order> createdAfter(LocalDateTime date) {
         return (root, query, cb) ->
-                date == null
-                        ? cb.conjunction()
+                date == null ? cb.conjunction()
                         : cb.greaterThanOrEqualTo(root.get("createdAt"), date);
     }
 
     public static Specification<Order> createdBefore(LocalDateTime date) {
         return (root, query, cb) ->
-                date == null
-                        ? cb.conjunction()
+                date == null ? cb.conjunction()
                         : cb.lessThanOrEqualTo(root.get("createdAt"), date);
     }
 

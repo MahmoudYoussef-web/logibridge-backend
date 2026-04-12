@@ -18,4 +18,7 @@ public enum OrderStatus {
             case DELIVERED, REJECTED, CANCELLED -> false;
         };
     }
+    public boolean isFinalState() {
+        return this == DELIVERED || this == REJECTED || this == CANCELLED;
+    }
 }

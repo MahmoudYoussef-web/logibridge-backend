@@ -1,6 +1,5 @@
 package com.logibridge.backend.order.controller.admin;
 
-
 import com.logibridge.backend.order.dto.AdminForceStatusRequest;
 import com.logibridge.backend.order.dto.OrderResponse;
 import com.logibridge.backend.order.enums.OrderStatus;
@@ -30,7 +29,6 @@ public class AdminOrderController {
     private final OrderService orderService;
     private final OrderQueryService orderQueryService;
 
-
     @GetMapping
     public ResponseEntity<Page<OrderResponse>> filterOrders(
             @RequestParam(required = false) Long companyId,
@@ -57,8 +55,6 @@ public class AdminOrderController {
         );
     }
 
-
-
     @PutMapping("/{orderNumber}/force-status")
     public ResponseEntity<OrderResponse> forceStatus(
             @PathVariable String orderNumber,
@@ -75,8 +71,6 @@ public class AdminOrderController {
                 )
         );
     }
-
-
 
     private CustomUserDetails getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
