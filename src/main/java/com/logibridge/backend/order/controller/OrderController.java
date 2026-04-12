@@ -8,6 +8,7 @@ import com.logibridge.backend.order.service.OrderQueryService;
 import com.logibridge.backend.order.service.OrderService;
 import com.logibridge.backend.security.service.CustomUserDetails;
 import com.logibridge.backend.common.exception.UnauthorizedException;
+import com.logibridge.backend.order.exception.InvalidOrderStateException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -106,38 +107,55 @@ public class OrderController {
     @PostMapping("/delivery/orders/{orderNumber}/accept")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<OrderResponse> acceptOrder(
-            @PathVariable String orderNumber
+            @PathVariable String orderNumber,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         Long deliveryId = getCurrentUser().getId();
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new InvalidOrderStateException("Missing Idempotency-Key header");
+        }
+
         return ResponseEntity.ok(
-                orderService.acceptOrder(orderNumber, deliveryId)
+                orderService.acceptOrder(orderNumber, deliveryId, idempotencyKey)
         );
     }
 
     @PostMapping("/delivery/orders/{orderNumber}/reject")
     @PreAuthorize("hasRole('DELIVERY')")
     public ResponseEntity<OrderResponse> rejectOrder(
-            @PathVariable String orderNumber
+            @PathVariable String orderNumber,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         Long deliveryId = getCurrentUser().getId();
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new InvalidOrderStateException("Missing Idempotency-Key header");
+        }
+
         return ResponseEntity.ok(
-                orderService.rejectOrder(orderNumber, deliveryId)
+                orderService.rejectOrder(orderNumber, deliveryId, idempotencyKey)
         );
     }
 
     @PostMapping("/orders/{orderNumber}/cancel")
     @PreAuthorize("hasRole('COMPANY')")
     public ResponseEntity<OrderResponse> cancelOrder(
-            @PathVariable String orderNumber
+            @PathVariable String orderNumber,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         Long companyId = getCurrentUser().getId();
+
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new InvalidOrderStateException("Missing Idempotency-Key header");
+        }
+
         return ResponseEntity.ok(
-                orderService.cancelOrder(orderNumber, companyId)
+                orderService.cancelOrder(orderNumber, companyId, idempotencyKey)
         );
     }
 
     private CustomUserDetails getCurrentUser() {
-
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
         if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails user)) {
