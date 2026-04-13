@@ -41,7 +41,7 @@ public class IdempotencyService {
                 return deserialize(json, responseType);
             }
 
-            log.warn("Idempotency key found but response not ready yet. Retrying action safely. key={} userId={}",
+            log.warn("Idempotency key found but response not ready yet. key={} userId={}",
                     idempotencyKey, userId);
 
             return action.get();
@@ -56,7 +56,7 @@ public class IdempotencyService {
                 .build();
 
         try {
-            idempotencyKeyRepository.save(record);
+            idempotencyKeyRepository.saveAndFlush(record);
         } catch (DataIntegrityViolationException ex) {
             log.warn("Race condition on idempotency key={} userId={} — fetching stored response",
                     idempotencyKey, userId);
@@ -80,6 +80,7 @@ public class IdempotencyService {
         idempotencyKeyRepository.findByKeyAndUserId(idempotencyKey, userId)
                 .ifPresent(k -> {
                     k.updateResponse(200, serialized);
+                    idempotencyKeyRepository.save(k);
                 });
 
         return result;
@@ -90,7 +91,7 @@ public class IdempotencyService {
             return objectMapper.writeValueAsString(object);
         } catch (JsonProcessingException ex) {
             log.error("Failed to serialize idempotency response", ex);
-            return null;
+            throw new DuplicateRequestException("Failed to serialize response");
         }
     }
 

@@ -23,5 +23,5 @@ public class OrderResponse {
     private OrderStatus status;
     private LocalDateTime createdAt;
 
-    private Long trackingCount;
+    private int trackingCount;
 }

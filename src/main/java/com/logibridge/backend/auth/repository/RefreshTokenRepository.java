@@ -8,8 +8,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
 
@@ -19,12 +20,9 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Query("SELECT t FROM RefreshToken t WHERE t.tokenHash = :tokenHash")
     Optional<RefreshToken> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
 
-    // Get all tokens for a user
     List<RefreshToken> findAllByUser(User user);
 
-    // Delete all tokens for user (logout all devices)
     void deleteAllByUser(User user);
 
-    // Delete expired tokens (cleanup job)
-    void deleteByExpiresAtBefore(java.time.Instant now);
+    int deleteByExpiresAtBefore(Instant now);
 }

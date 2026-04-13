@@ -1,10 +1,11 @@
 package com.logibridge.backend.order.service;
 
 import com.logibridge.backend.auth.entity.User;
+import com.logibridge.backend.auth.enums.RoleName;
 import com.logibridge.backend.auth.repository.UserRepository;
 import com.logibridge.backend.order.dto.CreateOrderRequest;
-import com.logibridge.backend.order.exception.NoDeliveryUserAvailableException;
 import com.logibridge.backend.order.exception.InvalidOrderStateException;
+import com.logibridge.backend.order.exception.NoDeliveryUserAvailableException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +22,15 @@ public class OrderAssignmentService {
 
         if (request.getDeliveryCompanyId() != null) {
             User user = userRepository.findById(request.getDeliveryCompanyId())
-                    .orElseThrow(() -> new InvalidOrderStateException("Invalid delivery user"));
+                    .orElseThrow(() -> new InvalidOrderStateException("Delivery user not found"));
+
+            boolean isDelivery = user.getUserRoles().stream()
+                    .anyMatch(ur -> ur.getRole().getName().equals(RoleName.ROLE_DELIVERY));
+
+            if (!isDelivery) {
+                throw new InvalidOrderStateException(
+                        "User " + request.getDeliveryCompanyId() + " is not a delivery user");
+            }
 
             return user.getId();
         }
@@ -32,9 +41,7 @@ public class OrderAssignmentService {
     private Long resolveAvailableDeliveryCompany() {
 
         List<User> candidates =
-                userRepository.findAllActiveUsersByRole(
-                        com.logibridge.backend.auth.enums.RoleName.ROLE_DELIVERY
-                );
+                userRepository.findAllActiveUsersByRole(RoleName.ROLE_DELIVERY);
 
         if (candidates.isEmpty()) {
             throw new NoDeliveryUserAvailableException(

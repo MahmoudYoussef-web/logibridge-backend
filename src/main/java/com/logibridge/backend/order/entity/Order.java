@@ -157,19 +157,12 @@ public class Order {
         return Collections.unmodifiableList(trackingHistory);
     }
 
-    public static OrderBuilder builder() {
-        return new ValidatingOrderBuilder();
-    }
-
-    private static class ValidatingOrderBuilder extends OrderBuilder {
-        @Override
-        public Order build() {
-            if (super.weight != null && super.weight <= 0) {
-                throw new InvalidOrderStateException(
-                        "Weight must be a positive value, got: " + super.weight);
-            }
-            return super.build();
+    public void validate() {
+        if (weight != null && weight <= 0) {
+            throw new InvalidOrderStateException(
+                    "Weight must be a positive value, got: " + weight);
         }
+
     }
 
     public static Order create(CreateOrderRequest request, Long companyId, String orderNumber) {

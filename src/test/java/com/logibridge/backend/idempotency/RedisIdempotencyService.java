@@ -1,4 +1,4 @@
-package com.logibridge.backend.common.idempotency;
+package com.logibridge.backend.idempotency;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

@@ -1,4 +1,4 @@
-package com.logibridge.backend.common.idempotency;
+package com.logibridge.backend.idempotency;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
