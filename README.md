@@ -23,6 +23,7 @@ A production-grade backend platform that connects companies with delivery servic
 - [Order Lifecycle](#order-lifecycle)
 - [API Reference](#api-reference)
 - [Running Locally](#running-locally)
+- [Testing](#testing)
 - [Tech Stack](#tech-stack)
 
 ---
@@ -392,6 +393,56 @@ createdb logibridge
 | `SPRING_DATASOURCE_PASSWORD` | DB password |
 | `AUTH_JWT_SECRET` | Base64-encoded HS256 secret (min 256 bits) |
 | `AUTH_JWT_EXPIRATION` | Access token TTL in milliseconds (`900000` = 15 min) |
+
+---
+
+## Testing
+
+The project includes a focused unit test suite covering the three most critical areas of the system: authentication logic, idempotency guarantees, and order state machine correctness.
+
+### Test Structure
+
+```
+src/test/java/com/logibridge/backend/
+├── auth/
+│   └── AuthServiceTest.java           # AuthService — registration logic
+├── idempotency/
+│   ├── IdempotencyServiceTest.java    # IdempotencyService — deduplication behavior
+│   ├── RedisIdempotencyService.java   # Redis-backed idempotency implementation
+│   └── RedisIdempotencyConfig.java    # Redis test configuration
+└── order/
+    ├── OrderStatusTest.java           # OrderStatus enum — transition rules
+    └── OrderValidatorTest.java        # OrderValidator — ownership + state validation
+```
+
+### What's Tested
+
+**`AuthServiceTest`** — verifies `AuthService` behavior using Mockito:
+- Throws `ConflictException` when registering with an email already in use
+- Completes successfully and returns tokens when registering with a valid, new email
+
+**`IdempotencyServiceTest`** — verifies `IdempotencyService` deduplication guarantees:
+- Returns the stored response immediately on a duplicate key — without executing the action or calling `save()`
+- Executes the action and persists the response on the first request
+
+**`OrderStatusTest`** — verifies all `OrderStatus.canTransitionTo()` rules:
+- Valid transitions: `PENDING → ASSIGNED`, `PENDING → CANCELLED`, `ASSIGNED → ACCEPTED`, `ASSIGNED → REJECTED`
+- Invalid transition: `PENDING → DELIVERED`
+- Terminal states: `DELIVERED`, `CANCELLED`, and `REJECTED` reject all outgoing transitions
+
+**`OrderValidatorTest`** — verifies `OrderValidator` guard methods:
+- `validateOwnership()` throws `UnauthorizedOrderAccessException` when the company ID does not own the order
+- `validateOwnership()` passes silently when the correct company ID is provided
+- `validateTransition()` throws `InvalidOrderStateException` on illegal state changes (e.g., `DELIVERED → IN_PROGRESS`)
+- `validateTransition()` throws `InvalidOrderStateException` when the order object is `null`
+
+### Running the Tests
+
+```bash
+./mvnw test
+```
+
+All tests use JUnit 5 + Mockito — no Spring context or database required. They run in isolation and complete in under a second.
 
 ---
 
