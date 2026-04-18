@@ -58,7 +58,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/").permitAll()
+                        .requestMatchers("/health").permitAll()
                         // Swagger
                         .requestMatchers(
                                 "/v3/api-docs/**",
