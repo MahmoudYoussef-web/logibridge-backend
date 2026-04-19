@@ -51,37 +51,26 @@ public class OrderQueryService {
         return orderRepository.findByCompanyId(companyId, pageable)
                 .map(orderMapper::toResponse);
     }
+
+
     @Transactional(readOnly = true)
     public Page<OrderResponse> getDeliveryOrders(Long deliveryCompanyId, Pageable pageable) {
 
-        List<OrderStatus> visibleStatuses = List.of(
-                OrderStatus.ASSIGNED,
-                OrderStatus.ACCEPTED,
-                OrderStatus.IN_PROGRESS
-        );
-
         Specification<Order> spec = Specification
                 .where(OrderSpecification.hasDeliveryCompanyId(deliveryCompanyId))
-                .and(OrderSpecification.hasStatusIn(visibleStatuses));
+                .and(OrderSpecification.hasStatusIn(getActiveDeliveryStatuses()));
 
         return orderRepository.findAll(spec, pageable)
                 .map(orderMapper::toResponse);
     }
 
-    @Transactional(readOnly = true)
-    public Page<OrderResponse> getAssignedOrders(Long deliveryCompanyId, Pageable pageable) {
-        List<OrderStatus> activeStatuses = List.of(
+
+    private List<OrderStatus> getActiveDeliveryStatuses() {
+        return List.of(
                 OrderStatus.ASSIGNED,
                 OrderStatus.ACCEPTED,
                 OrderStatus.IN_PROGRESS
         );
-
-        Specification<Order> spec = Specification
-                .where(OrderSpecification.hasDeliveryCompanyId(deliveryCompanyId))
-                .and(OrderSpecification.hasStatusIn(activeStatuses));
-
-        return orderRepository.findAll(spec, pageable)
-                .map(orderMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +89,7 @@ public class OrderQueryService {
                 .findByOrderIdOrderByTimestampAsc(order.getId(), pageable)
                 .map(orderTrackingMapper::toResponse);
     }
+
     @Transactional(readOnly = true)
     public Page<OrderResponse> filterOrders(
             Long companyId,
