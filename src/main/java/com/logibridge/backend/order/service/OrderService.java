@@ -208,8 +208,7 @@ public class OrderService {
                 || status == OrderStatus.CANCELLED;
     }
 
-    @Transactional
-    public Order saveWithRetry(CreateOrderRequest request, Long companyId) {
+    private  Order saveWithRetry(CreateOrderRequest request, Long companyId) {
         int attempt = 0;
         while (true) {
             try {

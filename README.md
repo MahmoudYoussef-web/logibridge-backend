@@ -82,7 +82,8 @@ src/main/java/com/logibridge/backend/
 │                           UnauthorizedException, DuplicateRequestException
 │
 └── order/
-    ├── controller/       # OrderController (Company + Delivery endpoints)
+    ├── ├── controller/       # OrderController (Company endpoints)
+    │   │                   DeliveryOrderController (Delivery endpoints)
     │   └── admin/        # AdminOrderController
     ├── service/          # OrderService, OrderQueryService, OrderAssignmentService
     │                       OrderTrackingService
@@ -407,12 +408,13 @@ src/test/java/com/logibridge/backend/
 ├── auth/
 │   └── AuthServiceTest.java           # AuthService — registration logic
 ├── idempotency/
-│   ├── IdempotencyServiceTest.java    # IdempotencyService — deduplication behavior
+│   ├── IdempotencyServiceTest.java    # IdempotencyService — deduplication + TTL expiry
 │   ├── RedisIdempotencyService.java   # Redis-backed idempotency implementation
 │   └── RedisIdempotencyConfig.java    # Redis test configuration
 └── order/
     ├── OrderStatusTest.java           # OrderStatus enum — transition rules
-    └── OrderValidatorTest.java        # OrderValidator — ownership + state validation
+    ├── OrderValidatorTest.java        # OrderValidator — ownership + state validation
+    └── OrderFlowIntegrationTest.java  # @SpringBootTest — full HTTP flow (create → accept → idempotent retry)
 ```
 
 ### What's Tested
@@ -442,8 +444,9 @@ src/test/java/com/logibridge/backend/
 ./mvnw test
 ```
 
-All tests use JUnit 5 + Mockito — no Spring context or database required. They run in isolation and complete in under a second.
+Unit tests use JUnit 5 + Mockito — no Spring context or database required. They run in isolation and complete in under a second.
 
+`OrderFlowIntegrationTest` is a full `@SpringBootTest` integration test that boots the real application context and exercises the HTTP layer end-to-end: it registers a company and delivery user via the API, creates an order, accepts it, then retries the accept with the same `Idempotency-Key` and asserts both responses are identical. Requires a running PostgreSQL and Redis instance (Docker Compose recommended).
 ---
 
 ## Tech Stack

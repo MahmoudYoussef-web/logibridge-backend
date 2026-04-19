@@ -1,7 +1,7 @@
 package com.logibridge.backend.order;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.logibridge.backend.order.dto.CreateOrderRequest;
-import com.logibridge.backend.order.dto.OrderResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,6 +29,22 @@ class OrderFlowIntegrationTest {
         return "http://localhost:" + port;
     }
 
+
+
+    private void registerUser(String email, String password, String role) {
+        Map<String, Object> request = Map.of(
+                "email", email,
+                "password", password,
+                "role", role
+        );
+
+        restTemplate.postForEntity(
+                baseUrl() + "/api/auth/register",
+                request,
+                String.class
+        );
+    }
+
     private String loginAndGetToken(String email, String password) throws Exception {
 
         Map<String, String> request = Map.of(
@@ -44,7 +60,8 @@ class OrderFlowIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        Map<String, Object> body = objectMapper.readValue(response.getBody(), Map.class);
+        Map<String, Object> body =
+                objectMapper.readValue(response.getBody(), Map.class);
 
         return (String) ((Map<?, ?>) body.get("data")).get("accessToken");
     }
@@ -56,11 +73,24 @@ class OrderFlowIntegrationTest {
         return headers;
     }
 
+    private String extractOrderNumber(ResponseEntity<String> response) throws Exception {
+        Map<String, Object> body =
+                objectMapper.readValue(response.getBody(), Map.class);
+
+        return (String) ((Map<?, ?>) body.get("data")).get("orderNumber");
+    }
+
+
+
     @Test
     void fullFlow_create_accept_idempotent() throws Exception {
 
 
-        String companyToken = loginAndGetToken("company@gmail.com", "123456");
+        registerUser("company@test.com", "123456", "COMPANY");
+        registerUser("delivery@test.com", "123456", "DELIVERY");
+
+
+        String companyToken = loginAndGetToken("company@test.com", "123456");
 
 
         CreateOrderRequest request = new CreateOrderRequest();
@@ -79,15 +109,11 @@ class OrderFlowIntegrationTest {
 
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 
-        Map<String, Object> body =
-                objectMapper.readValue(createResponse.getBody(), Map.class);
-
-        String orderNumber = (String) ((Map<?, ?>) body.get("data")).get("orderNumber");
-
+        String orderNumber = extractOrderNumber(createResponse);
         assertThat(orderNumber).isNotNull();
 
 
-        String deliveryToken = loginAndGetToken("delivery@gmail.com", "123456");
+        String deliveryToken = loginAndGetToken("delivery@test.com", "123456");
 
         String idempotencyKey = "test-key-123";
 
@@ -115,6 +141,7 @@ class OrderFlowIntegrationTest {
                 );
 
         assertThat(acceptResponse2.getStatusCode()).isEqualTo(HttpStatus.OK);
+
 
         assertThat(acceptResponse1.getBody()).isEqualTo(acceptResponse2.getBody());
     }
