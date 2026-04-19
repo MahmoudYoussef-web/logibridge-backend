@@ -69,7 +69,7 @@ public class OrderService {
     }
 
     @Transactional
-    protected OrderResponse doCancelOrder(String orderNumber, Long companyId) {
+    public  OrderResponse doCancelOrder(String orderNumber, Long companyId) {
 
         Order order = orderRepository.findByOrderNumberForUpdate(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
@@ -94,7 +94,7 @@ public class OrderService {
     }
 
     @Transactional
-    protected OrderResponse doAcceptOrder(String orderNumber, Long deliveryCompanyId) {
+    public  OrderResponse doAcceptOrder(String orderNumber, Long deliveryCompanyId) {
 
         Order order = orderRepository.findByOrderNumberForUpdate(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
@@ -119,7 +119,7 @@ public class OrderService {
     }
 
     @Transactional
-    protected OrderResponse doRejectOrder(String orderNumber, Long deliveryCompanyId) {
+    public OrderResponse doRejectOrder(String orderNumber, Long deliveryCompanyId) {
 
         Order order = orderRepository.findByOrderNumberForUpdate(orderNumber)
                 .orElseThrow(() -> new OrderNotFoundException(orderNumber));
@@ -209,7 +209,7 @@ public class OrderService {
     }
 
     @Transactional
-    protected Order saveWithRetry(CreateOrderRequest request, Long companyId) {
+    public Order saveWithRetry(CreateOrderRequest request, Long companyId) {
         int attempt = 0;
         while (true) {
             try {
