@@ -71,9 +71,7 @@ public class JwtService {
     }
 
 
-    public List<String> extractRoles(String token) {
-        return List.of();
-    }
+
 
 
     public record ParsedToken(String username, boolean isAccessToken) {}
