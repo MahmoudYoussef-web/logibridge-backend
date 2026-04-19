@@ -3,6 +3,7 @@ package com.logibridge.backend.common.idempotency;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -36,6 +37,9 @@ public class IdempotencyKey {
 
     @Column(name = "response_body", columnDefinition = "TEXT")
     private String responseBody;
+
+    @Column(nullable = false)
+    private Instant expiresAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

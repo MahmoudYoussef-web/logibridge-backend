@@ -10,6 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
@@ -24,22 +25,25 @@ class IdempotencyServiceTest {
     @InjectMocks IdempotencyService service;
 
     @Test
-    void returns_stored_response_on_duplicate_key() throws Exception {
+    void returns_stored_response_when_key_is_valid() throws Exception {
         String key = "test-key";
         Long userId = 1L;
         String storedJson = "{\"orderNumber\":\"ORD-001\"}";
 
         IdempotencyKey existing = mock(IdempotencyKey.class);
+
         when(existing.getResponseBody()).thenReturn(storedJson);
-        when(repository.findByKeyAndUserId(key, userId)).thenReturn(Optional.of(existing));
+        when(existing.getExpiresAt()).thenReturn(Instant.now().plusSeconds(300)); // ✅ valid
+
+        when(repository.findByKeyAndUserId(key, userId))
+                .thenReturn(Optional.of(existing));
 
         TestResponse expected = new TestResponse("ORD-001");
         when(objectMapper.readValue(storedJson, TestResponse.class)).thenReturn(expected);
 
         TestResponse result = service.executeIdempotent(
-                key, "testEndpoint", userId, TestResponse.class, () -> {
-                    throw new RuntimeException("Should not be called");
-                }
+                key, "testEndpoint", userId, TestResponse.class,
+                () -> { throw new RuntimeException("Should not be called"); }
         );
 
         assertThat(result.orderNumber()).isEqualTo("ORD-001");
@@ -47,19 +51,44 @@ class IdempotencyServiceTest {
     }
 
     @Test
+    void executes_action_when_key_is_expired() throws Exception {
+        String key = "expired-key";
+        Long userId = 1L;
+
+        IdempotencyKey expired = mock(IdempotencyKey.class);
+
+        when(expired.getExpiresAt()).thenReturn(Instant.now().minusSeconds(10)); // ❌ expired
+
+        when(repository.findByKeyAndUserId(key, userId))
+                .thenReturn(Optional.of(expired))
+                .thenReturn(Optional.empty());
+
+        when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(objectMapper.writeValueAsString(any()))
+                .thenReturn("{\"orderNumber\":\"ORD-NEW\"}");
+
+        TestResponse result = service.executeIdempotent(
+                key, "testEndpoint", userId, TestResponse.class,
+                () -> new TestResponse("ORD-NEW")
+        );
+
+        assertThat(result.orderNumber()).isEqualTo("ORD-NEW");
+
+        verify(repository).delete(expired);
+        verify(repository, atLeastOnce()).save(any());
+    }
+
+    @Test
     void executes_action_and_saves_on_first_request() throws Exception {
         String key = "new-key";
         Long userId = 1L;
-        String serialized = "{\"orderNumber\":\"ORD-002\"}";
-
-        IdempotencyKey savedRecord = mock(IdempotencyKey.class);
 
         when(repository.findByKeyAndUserId(key, userId))
-                .thenReturn(Optional.empty())
-                .thenReturn(Optional.of(savedRecord));
+                .thenReturn(Optional.empty());
 
         when(repository.save(any())).thenAnswer(i -> i.getArgument(0));
-        when(objectMapper.writeValueAsString(any())).thenReturn(serialized);
+        when(objectMapper.writeValueAsString(any()))
+                .thenReturn("{\"orderNumber\":\"ORD-002\"}");
 
         TestResponse result = service.executeIdempotent(
                 key, "testEndpoint", userId, TestResponse.class,
@@ -67,7 +96,7 @@ class IdempotencyServiceTest {
         );
 
         assertThat(result.orderNumber()).isEqualTo("ORD-002");
-        verify(repository, atLeastOnce()).save(any());
+        verify(repository).save(any());
     }
 
     record TestResponse(String orderNumber) {}

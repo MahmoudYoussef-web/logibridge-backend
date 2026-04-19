@@ -9,6 +9,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -16,6 +18,8 @@ import java.util.function.Supplier;
 @Service
 @RequiredArgsConstructor
 public class IdempotencyService {
+
+    private static final Duration TTL = Duration.ofMinutes(5);
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final ObjectMapper objectMapper;
@@ -28,24 +32,37 @@ public class IdempotencyService {
             Class<T> responseType,
             Supplier<T> action
     ) {
-        Optional<IdempotencyKey> existing =
+        Optional<IdempotencyKey> existingOpt =
                 idempotencyKeyRepository.findByKeyAndUserId(idempotencyKey, userId);
 
-        if (existing.isPresent()) {
-            log.info("Idempotency hit: key={} endpoint={} userId={}",
-                    idempotencyKey, endpoint, userId);
+        if (existingOpt.isPresent()) {
+            IdempotencyKey existing = existingOpt.get();
 
-            String json = existing.get().getResponseBody();
 
-            if (json != null) {
-                return deserialize(json, responseType);
+            if (existing.getExpiresAt() != null &&
+                    existing.getExpiresAt().isBefore(Instant.now())) {
+
+                log.info("Idempotency expired — deleting key={} userId={}",
+                        idempotencyKey, userId);
+
+                idempotencyKeyRepository.delete(existing);
+            } else {
+                log.info("Idempotency hit: key={} endpoint={} userId={}",
+                        idempotencyKey, endpoint, userId);
+
+                String json = existing.getResponseBody();
+
+                if (json != null) {
+                    return deserialize(json, responseType);
+                }
+
+                log.warn("Idempotency key found but response not ready yet. key={} userId={}",
+                        idempotencyKey, userId);
+
+                return action.get();
             }
-
-            log.warn("Idempotency key found but response not ready yet. key={} userId={}",
-                    idempotencyKey, userId);
-
-            return action.get();
         }
+
 
         IdempotencyKey record = IdempotencyKey.builder()
                 .key(idempotencyKey)
@@ -53,6 +70,7 @@ public class IdempotencyService {
                 .userId(userId)
                 .responseStatus(200)
                 .responseBody(null)
+                .expiresAt(Instant.now().plus(TTL))
                 .build();
 
         try {
@@ -63,6 +81,14 @@ public class IdempotencyService {
 
             return idempotencyKeyRepository.findByKeyAndUserId(idempotencyKey, userId)
                     .map(k -> {
+
+                        if (k.getExpiresAt() != null &&
+                                k.getExpiresAt().isBefore(Instant.now())) {
+
+                            idempotencyKeyRepository.delete(k);
+                            return action.get();
+                        }
+
                         String json = k.getResponseBody();
                         if (json == null) {
                             return action.get();
