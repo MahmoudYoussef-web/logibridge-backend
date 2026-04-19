@@ -93,16 +93,7 @@ public class OrderController {
         );
     }
 
-    @GetMapping("/delivery/orders/assigned")
-    @PreAuthorize("hasRole('DELIVERY')")
-    public ResponseEntity<Page<OrderResponse>> getAssignedOrders(
-            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
-    ) {
-        Long deliveryId = getCurrentUser().getId();
-        return ResponseEntity.ok(
-                orderQueryService.getAssignedOrders(deliveryId, pageable)
-        );
-    }
+
 
     @PostMapping("/delivery/orders/{orderNumber}/accept")
     @PreAuthorize("hasRole('DELIVERY')")
