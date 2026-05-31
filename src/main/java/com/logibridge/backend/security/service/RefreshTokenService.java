@@ -19,7 +19,7 @@ public class RefreshTokenService {
 
     private final RefreshTokenRepository repository;
 
-    //  CREATE
+
     @Transactional
     public RefreshToken create(User user) {
         RefreshToken token = RefreshToken.builder()
@@ -32,21 +32,21 @@ public class RefreshTokenService {
         return repository.save(token);
     }
 
-    //  VERIFY
+
     public RefreshToken verify(String token) {
         return repository.findByTokenHash(token)
                 .filter(RefreshToken::isValid)
                 .orElseThrow(() -> new InvalidTokenException("Invalid or expired refresh token"));
     }
 
-    // ROTATE
+
     @Transactional
     public RefreshToken rotate(String tokenHash) {
 
         RefreshToken oldToken = repository.findByTokenHashForUpdate(tokenHash)
                 .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
 
-        // reuse detection
+
         if (oldToken.isRevoked()) {
             handleReuseAttack(oldToken);
             throw new InvalidTokenException("Refresh token reuse detected");
@@ -76,29 +76,29 @@ public class RefreshTokenService {
         return repository.save(newToken);
     }
 
-    //  LOGOUT ALL
+
     @Transactional
     public void deleteAllByUser(User user) {
         repository.deleteAllByUser(user);
     }
 
-    //  SAVE
+
     public RefreshToken save(RefreshToken token) {
         return repository.save(token);
     }
 
-    //  FIND
+
     public RefreshToken findByTokenHashOrNull(String tokenHash) {
         return repository.findByTokenHash(tokenHash).orElse(null);
     }
 
-    //  REUSE ATTACK HANDLER
+
     private void handleReuseAttack(RefreshToken token) {
-        //  revoke ALL user sessions
+
         repository.deleteAllByUser(token.getUser());
     }
 
-    //  TOKEN GENERATION
+
     private String generateToken() {
         return UUID.randomUUID().toString();
     }

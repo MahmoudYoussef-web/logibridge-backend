@@ -59,27 +59,27 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health").permitAll()
-                        // Swagger
+
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
 
-                        // Public Auth APIs
+
                         .requestMatchers(
                                 "/api/auth/login",
                                 "/api/auth/register/**",
                                 "/api/auth/refresh"
                         ).permitAll()
 
-                        // Authenticated only
+
                         .requestMatchers(
                                 "/api/auth/logout",
                                 "/api/auth/logout-all"
                         ).authenticated()
 
-                        // Role-based
+
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/delivery/**").hasRole("DELIVERY")
                         .requestMatchers("/api/orders/**").authenticated()

@@ -50,7 +50,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             JwtService.ParsedToken parsed = jwtService.parseAndValidate(token);
 
             if (!parsed.isAccessToken()) {
-                // Refresh tokens hitting protected endpoints = failed auth attempt
+
                 if (rejectAndRecord(ip, response, "INVALID_TOKEN_TYPE")) return;
                 filterChain.doFilter(request, response);
                 return;
